@@ -741,7 +741,7 @@ function folhaCodigo(aoEscolher) {
     } catch (e) { console.warn(e); abrirManual({ codigoBarras: codigo }, `${FONTE_OFF} não respondeu. Cadastre pelo rótulo; o código fica salvo.`); }
   };
   abrirFolha(`${cab('Código de barras')}
-    ${temLeitor() ? `<div class="camera"><video playsinline muted autoplay style="width:100%;border-radius:12px;background:#000;aspect-ratio:4/3;object-fit:cover"></video><p class="help cam-msg">Aponte a câmera para o código de barras.</p></div>`
+    ${temLeitor() ? `<div class="camera"><video playsinline muted autoplay style="width:100%;border-radius:12px;background:#000;aspect-ratio:4/3;object-fit:cover"></video><div class="row cam-ctr" style="margin-top:8px;min-height:0"></div><p class="help cam-msg">Abrindo a câmera…</p></div>`
       : `<p class="help">Este navegador não tem leitor de código embutido (no Android, use o Chrome). Digite o código abaixo.</p>`}
     <form class="row" data-form="codigo"><div class="field grow" style="margin:0"><label>Código (EAN)</label><input name="codigo" inputmode="numeric" pattern="[0-9]*" placeholder="7891234567890" autocomplete="off"></div><button class="btn primary" type="submit" style="align-self:flex-end">Buscar</button></form>
     <p class="help status" aria-live="polite" style="margin-top:10px"></p>
@@ -754,12 +754,29 @@ function folhaCodigo(aoEscolher) {
       const formatos = (await BarcodeDetector.getSupportedFormats()).filter((f) => ['ean_13', 'ean_8', 'upc_a', 'upc_e'].includes(f));
       if (!formatos.length) throw new Error('sem formatos EAN');
       const det = new BarcodeDetector({ formats: formatos });
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } }, audio: false });
+      // Resolução alta + foco contínuo ajudam em código pequeno; zoom e lanterna quando a câmera oferecer.
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
       video.srcObject = stream; await video.play(); rodando = true;
+      const trilha = stream.getVideoTracks()[0];
+      const cap = trilha.getCapabilities ? trilha.getCapabilities() : {};
+      const aplicar = (c) => trilha.applyConstraints({ advanced: [c] }).catch(() => {});
+      if (Array.isArray(cap.focusMode) && cap.focusMode.includes('continuous')) aplicar({ focusMode: 'continuous' });
+      const ctr = $('.cam-ctr', s);
+      if (cap.zoom && cap.zoom.max > cap.zoom.min) {
+        const z = document.createElement('input'); z.type = 'range'; z.min = cap.zoom.min; z.max = cap.zoom.max; z.step = cap.zoom.step || 0.1;
+        z.value = Math.min(cap.zoom.max, Math.max(cap.zoom.min, 2)); z.setAttribute('aria-label', 'Zoom'); z.className = 'grow';
+        aplicar({ zoom: Number(z.value) }); z.addEventListener('input', () => aplicar({ zoom: Number(z.value) }));
+        const rot = document.createElement('span'); rot.className = 'small muted'; rot.textContent = 'Zoom'; ctr.append(rot, z);
+      }
+      if (cap.torch) {
+        let ligada = false; const bt = document.createElement('button'); bt.type = 'button'; bt.className = 'btn sm'; bt.textContent = '🔦 Lanterna';
+        bt.addEventListener('click', () => { ligada = !ligada; aplicar({ torch: ligada }); bt.classList.toggle('primary', ligada); }); ctr.append(bt);
+      }
+      msg.textContent = 'Aponte a câmera para o código de barras. Código pequeno: aproxime até ele ocupar quase toda a largura' + (cap.zoom ? ' ou use o zoom' : '') + '.';
       const laco = async () => {
         if (!rodando) return;
         try { const cods = await det.detect(video); if (cods.length && rodando) { msg.textContent = `Lido: ${cods[0].rawValue}`; tratar(s, cods[0].rawValue); return; } } catch { /* quadro inválido */ }
-        setTimeout(laco, 150);
+        setTimeout(laco, 120);
       };
       laco();
     } catch (e) {
