@@ -14,6 +14,17 @@ const CHAVE_DEMO = 'meuprato.demo.v1';
 const CHAVE_MODO = 'meuprato.modo';
 const VERSAO_DADOS = 1;
 const REFEICOES_PADRAO = ['Café da manhã', 'Almoço', 'Lanche', 'Jantar'];
+// Alimentos comuns, por 100 g de parte comestível, copiados da TACO 4ª edição (NEPA/Unicamp, 2011).
+// Entram como cadastro normal (editável) e levam o campo `fonte`. Sem medidas caseiras de propósito:
+// peso de "1 unidade" ou "1 colher" varia, então o usuário cadastra a equivalência que pesou.
+const FONTE_TACO = 'TACO 4ª ed. (NEPA/Unicamp)';
+const ALIMENTOS_BASE = [
+  { nome: 'Ovo de galinha inteiro, cozido', estado: 'cozido', kcal: 146, prot: 13.3, carb: 0.6, gord: 9.5 },
+  { nome: 'Arroz branco tipo 1, cozido', estado: 'cozido', kcal: 128, prot: 2.5, carb: 28.1, gord: 0.2 },
+  { nome: 'Feijão carioca, cozido', estado: 'cozido', kcal: 76, prot: 4.8, carb: 13.6, gord: 0.5 },
+  { nome: 'Frango, peito sem pele, grelhado', estado: 'cozido', kcal: 159, prot: 32.0, carb: 0, gord: 2.5 },
+  { nome: 'Pão de forma integral', estado: 'na', kcal: 253, prot: 9.4, carb: 49.9, gord: 3.7 },
+];
 
 function dadosVazios() {
   return {
@@ -214,7 +225,7 @@ function telaAlimentos() {
   const itens = [];
   if (f !== 'receitas') for (const a of D.alimentos) if ((f !== 'favoritos' || a.favorito) && bate(a.nome + ' ' + (a.marca || ''))) itens.push(itemListaAlimento(a, 'abrir-alimento'));
   if (f !== 'todos' || true) for (const r of D.receitas) if ((f === 'receitas' || f === 'todos' || (f === 'favoritos' && r.favorito)) && bate(r.nome)) itens.push(itemListaReceita(r, 'abrir-receita'));
-  html += itens.length ? itens.join('') : `<div class="empty">${D.alimentos.length || D.receitas.length ? 'Nada encontrado com esse filtro.' : 'Nenhum alimento cadastrado ainda. Toque em “+ Alimento” para começar.'}</div>`;
+  html += itens.length ? itens.join('') : `<div class="empty">${D.alimentos.length || D.receitas.length ? 'Nada encontrado com esse filtro.' : 'Nenhum alimento cadastrado ainda. Toque em “+ Alimento” para começar.'}</div>` + (D.alimentos.length ? '' : `<button class="btn full" data-act="importar-base" style="margin-top:8px">Adicionar alimentos comuns (TACO)</button>`);
   html += `</section>`;
   return html;
 }
@@ -222,7 +233,7 @@ function itemListaAlimento(a, act, extra = '') {
   const estado = a.estado && a.estado !== 'na' ? ` · ${a.estado}` : '';
   return `<button class="list-item" data-act="${act}" data-id="${a.id}" ${extra}>
     <div class="grow"><div class="name">${a.favorito ? '<span class="star">★</span> ' : ''}${esc(a.nome)}${a.marca ? ` <span class="muted">· ${esc(a.marca)}</span>` : ''}</div>
-    <div class="meta">${fmt(a.kcal)} kcal · ${fmt(a.prot, 1)} g prot por ${fmt(a.refQtd, 2)} ${esc(a.refUnidade)}${estado}</div></div><span class="muted">›</span></button>`;
+    <div class="meta">${fmt(a.kcal)} kcal · ${fmt(a.prot, 1)} g prot por ${fmt(a.refQtd, 2)} ${esc(a.refUnidade)}${estado}${a.fonte ? ` · <span class="badge neutral">${esc(a.fonte)}</span>` : ''}</div></div><span class="muted">›</span></button>`;
 }
 function itemListaReceita(r, act, extra = '') {
   const t = totaisReceita(r); const pp = r.porcoes > 0 ? t.kcal / r.porcoes : 0; const pr = r.porcoes > 0 ? t.prot / r.porcoes : 0;
@@ -280,6 +291,11 @@ function telaConfig() {
     <h2>Refeições padrão</h2>
     <p class="help">Uma por linha. Vale para dias novos; dias já criados não mudam.</p>
     <form data-form="refeicoes"><div class="field"><textarea name="lista" rows="4" style="min-height:100px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);width:100%">${esc(D.config.refeicoesPadrao.join('\n'))}</textarea></div><button class="btn full" type="submit">Salvar refeições padrão</button></form>
+  </section>
+  <section class="card">
+    <h2>Alimentos comuns</h2>
+    <p class="help">Adiciona ovo cozido, arroz, feijão, frango grelhado e pão integral com valores por 100 g copiados da ${FONTE_TACO}. Entram como cadastro normal: confira e corrija se o seu produto for diferente. Itens já cadastrados não se repetem.</p>
+    <button class="btn full" data-act="importar-base">Adicionar alimentos comuns (TACO)</button>
   </section>
   <section class="card">
     <h2>Dados e privacidade</h2>
@@ -468,6 +484,7 @@ function folhaAlimento(id, inicial = {}, aoSalvar) {
         <div class="field"><label>Marca (opcional)</label><input name="marca" value="${esc(v.marca || '')}"></div>
         <div class="field"><label>Estado</label><select name="estado"><option value="na" ${v.estado === 'na' ? 'selected' : ''}>não se aplica</option><option value="cru" ${v.estado === 'cru' ? 'selected' : ''}>cru</option><option value="cozido" ${v.estado === 'cozido' ? 'selected' : ''}>cozido</option></select></div>
       </div>
+      ${a && a.fonte ? `<p class="help" style="margin-top:0">Valores de origem: <b>${esc(a.fonte)}</b>. Se editar, eles passam a ser seus.</p>` : ''}
       <p class="help" style="margin-top:0">Os valores abaixo valem para a <b>quantidade de referência</b> (ex.: 100 g, 100 ml ou 1 porção). Copie do rótulo.</p>
       <div class="grid2">
         <div class="field"><label>Quantidade de referência</label><input name="refQtd" inputmode="decimal" value="${fmt(v.refQtd, 3)}" required></div>
@@ -514,7 +531,12 @@ function folhaAlimento(id, inicial = {}, aoSalvar) {
       if (!(campos.refQtd > 0)) { toast('Quantidade de referência deve ser maior que zero.'); return; }
       for (const k of ['kcal', 'prot', 'carb', 'gord']) if (!(campos[k] >= 0)) { toast(`Valor inválido em ${k}. Use números (vírgula ou ponto).`); return; }
       let salvo;
-      if (a) { Object.assign(a, campos, { atualizadoEm: new Date().toISOString() }); salvo = a; }
+      if (a) {
+        const mudouValor = a.fonte && ['kcal', 'prot', 'carb', 'gord', 'refQtd', 'refUnidade'].some((k) => a[k] !== campos[k]);
+        Object.assign(a, campos, { atualizadoEm: new Date().toISOString() });
+        if (mudouValor) a.fonte = a.fonte.replace(/ \(editado\)$/, '') + ' (editado)';
+        salvo = a;
+      }
       else { salvo = { id: uid(), ...campos, criadoEm: new Date().toISOString() }; D.alimentos.push(salvo); }
       D.alimentos.sort((x, y) => x.nome.localeCompare(y.nome, 'pt-BR'));
       salvar(); fecharFolha(); render(); toast(a ? 'Alimento atualizado.' : 'Alimento cadastrado.');
@@ -662,6 +684,17 @@ function importarJSON(arquivo) {
   leitor.readAsText(arquivo);
 }
 
+// ---------- Alimentos comuns (TACO) ----------
+function importarAlimentosBase() {
+  const existentes = new Set(D.alimentos.map((a) => a.nome.toLowerCase()));
+  const novos = ALIMENTOS_BASE.filter((b) => !existentes.has(b.nome.toLowerCase()));
+  if (!novos.length) { toast('Esses alimentos já estão cadastrados.'); return; }
+  if (!confirmar(`Adicionar ${novos.length} alimento(s) da ${FONTE_TACO}, por 100 g?\n\n${novos.map((b) => `• ${b.nome}`).join('\n')}\n\nVocê pode conferir e corrigir cada valor depois.`)) return;
+  for (const b of novos) D.alimentos.push({ id: uid(), nome: b.nome, marca: '', estado: b.estado, refQtd: 100, refUnidade: 'g', kcal: b.kcal, prot: b.prot, carb: b.carb, gord: b.gord, medidas: [], favorito: false, fonte: FONTE_TACO, criadoEm: new Date().toISOString() });
+  D.alimentos.sort((x, y) => x.nome.localeCompare(y.nome, 'pt-BR'));
+  salvar(); UI.aba = 'alimentos'; UI.filtroAlimentos = 'todos'; render(); toast(`${novos.length} alimento(s) adicionado(s).`);
+}
+
 // ---------- Demonstração ----------
 function semearDemo(d) {
   const mk = (nome, marca, refQtd, refUnidade, kcal, prot, carb, gord, medidas = [], estado = 'na', favorito = false) => ({ id: uid(), nome, marca, estado, refQtd, refUnidade, kcal, prot, carb, gord, medidas, favorito, criadoEm: new Date().toISOString() });
@@ -718,6 +751,7 @@ document.addEventListener('click', (e) => {
     'exportar-csv': exportarCSV,
     'importar-json': () => $('[data-act="arquivo-json"]').click(),
     'alternar-demo': alternarDemo,
+    'importar-base': importarAlimentosBase,
     'apagar-tudo': () => { if (!confirmar('Apagar TODOS os alimentos, receitas e registros deste modo? Não dá para desfazer. Exporte um backup antes, se quiser.')) return; if (!confirmar('Confirma mesmo? Última chance.')) return; D = dadosVazios(); salvar(); render(); toast('Dados apagados.'); },
   };
   if (acoes[act]) acoes[act]();

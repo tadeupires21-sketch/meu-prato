@@ -36,7 +36,9 @@ dependência, sem servidor de dados. Interface em pt-BR, feita para celular (And
 
 - Dados ficam só neste aparelho e navegador: limpar dados do site, trocar de celular ou desinstalar apaga
   tudo. Exporte o backup com frequência.
-- Nenhuma base nutricional embutida: tudo é cadastro manual (nada é inventado).
+- Única lista embutida: cinco alimentos comuns (ovo cozido, arroz, feijão, frango grelhado, pão integral) com
+  valores por 100 g copiados da TACO 4ª ed. (NEPA/Unicamp), opcionais, marcados com a fonte e editáveis.
+  Todo o resto é cadastro manual; nada é estimado.
 - Sem conta, sincronização, código de barras, exercícios ou foto.
 - O cache offline (`sw.js`) guarda a versão instalada; ao mudar arquivos, suba `VERSAO` em `sw.js`.
 
