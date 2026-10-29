@@ -18,12 +18,23 @@ const REFEICOES_PADRAO = ['Café da manhã', 'Almoço', 'Lanche', 'Jantar'];
 // Entram como cadastro normal (editável) e levam o campo `fonte`. Sem medidas caseiras de propósito:
 // peso de "1 unidade" ou "1 colher" varia, então o usuário cadastra a equivalência que pesou.
 const FONTE_TACO = 'TACO 4ª ed. (NEPA/Unicamp)';
+// `medidas` aqui são pesos médios APROXIMADOS, de tabelas de medidas caseiras que divergem entre si;
+// por isso entram com `obs` e o usuário deve conferir pesando. Onde não há consenso, não há medida.
+const OBS_MEDIDA = 'Peso por unidade é média aproximada; pese o seu e ajuste a equivalência.';
 const ALIMENTOS_BASE = [
-  { nome: 'Ovo de galinha inteiro, cozido', estado: 'cozido', kcal: 146, prot: 13.3, carb: 0.6, gord: 9.5 },
+  { nome: 'Ovo de galinha inteiro, cozido', estado: 'cozido', kcal: 146, prot: 13.3, carb: 0.6, gord: 9.5, medidas: [{ nome: 'unidade', equivale: 50 }], obs: OBS_MEDIDA },
   { nome: 'Arroz branco tipo 1, cozido', estado: 'cozido', kcal: 128, prot: 2.5, carb: 28.1, gord: 0.2 },
   { nome: 'Feijão carioca, cozido', estado: 'cozido', kcal: 76, prot: 4.8, carb: 13.6, gord: 0.5 },
   { nome: 'Frango, peito sem pele, grelhado', estado: 'cozido', kcal: 159, prot: 32.0, carb: 0, gord: 2.5 },
-  { nome: 'Pão de forma integral', estado: 'na', kcal: 253, prot: 9.4, carb: 49.9, gord: 3.7 },
+  { nome: 'Pão de forma integral', estado: 'na', kcal: 253, prot: 9.4, carb: 49.9, gord: 3.7, medidas: [{ nome: 'fatia', equivale: 25 }], obs: 'Fatia de 25 g é média; o rótulo da sua marca traz o peso exato e os valores dela.' },
+  { nome: 'Banana prata, crua', estado: 'cru', kcal: 98, prot: 1.3, carb: 26.0, gord: 0.1, medidas: [{ nome: 'unidade', equivale: 65 }], obs: OBS_MEDIDA },
+  { nome: 'Aveia em flocos, crua', estado: 'cru', kcal: 394, prot: 13.9, carb: 66.6, gord: 8.5, medidas: [{ nome: 'colher de sopa', equivale: 15 }], obs: 'Colher de sopa de 15 g é média; varia com flocos finos/grossos e colher cheia/rasa.' },
+  { nome: 'Batata-doce, cozida', estado: 'cozido', kcal: 77, prot: 0.6, carb: 18.4, gord: 0.1, obs: 'Sem medida por unidade: o tamanho varia demais. Pese e cadastre a sua.' },
+  { nome: 'Maçã Fuji com casca, crua', estado: 'cru', kcal: 56, prot: 0.3, carb: 15.2, gord: 0, obs: 'Sem medida por unidade: tabelas divergem (de 100 a 160 g). Pese uma e cadastre "unidade".' },
+];
+// Modelos: abrem o formulário já preenchido com o que não varia; valores vêm do rótulo do produto.
+const MODELOS_BASE = [
+  { nome: 'Whey protein', refQtd: 30, refUnidade: 'g', medidas: [{ nome: 'scoop', equivale: 30 }], obs: 'Confira no rótulo a porção (g) e o peso do scoop; aqui está pré-preenchido 30 g, o mais comum.' },
 ];
 
 function dadosVazios() {
@@ -294,8 +305,10 @@ function telaConfig() {
   </section>
   <section class="card">
     <h2>Alimentos comuns</h2>
-    <p class="help">Adiciona ovo cozido, arroz, feijão, frango grelhado e pão integral com valores por 100 g copiados da ${FONTE_TACO}. Entram como cadastro normal: confira e corrija se o seu produto for diferente. Itens já cadastrados não se repetem.</p>
+    <p class="help">Adiciona ovo cozido, arroz, feijão, frango grelhado, pão integral, banana, aveia, batata-doce e maçã com valores por 100 g copiados da ${FONTE_TACO}. Entram como cadastro normal: confira e corrija se o seu produto for diferente. Itens já cadastrados não se repetem.</p>
     <button class="btn full" data-act="importar-base">Adicionar alimentos comuns (TACO)</button>
+    <p class="help" style="margin-top:12px">Suplementos variam por marca, então não têm valor embutido. O modelo abaixo abre o cadastro já com porção e scoop para você copiar o rótulo.</p>
+    ${MODELOS_BASE.map((m, i) => `<button class="btn full" data-act="modelo" data-i="${i}">Cadastrar ${esc(m.nome)} (do rótulo)</button>`).join('')}
   </section>
   <section class="card">
     <h2>Dados e privacidade</h2>
@@ -474,7 +487,7 @@ function folhaCopiar(idxDestino) {
 // ----- Cadastro / edição de alimento -----
 function folhaAlimento(id, inicial = {}, aoSalvar) {
   const a = id ? D.alimentos.find((x) => x.id === id) : null;
-  const v = Object.assign({ nome: '', marca: '', estado: 'na', refQtd: 100, refUnidade: 'g', kcal: '', prot: '', carb: '', gord: '', medidas: [], favorito: false }, a || {}, inicial);
+  const v = Object.assign({ nome: '', marca: '', estado: 'na', refQtd: 100, refUnidade: 'g', kcal: '', prot: '', carb: '', gord: '', medidas: [], favorito: false, obs: '' }, a || {}, inicial);
   let medidas = v.medidas.map((m) => ({ ...m }));
   const linhaMedida = (m, i) => `<div class="ing"><div class="grow">${esc(m.nome)} = ${fmt(m.equivale, 2)} <span class="un"></span></div><button type="button" class="btn sm ghost danger" data-rm="${i}">remover</button></div>`;
   abrirFolha(`${cab(a ? 'Editar alimento' : 'Novo alimento')}
@@ -485,6 +498,7 @@ function folhaAlimento(id, inicial = {}, aoSalvar) {
         <div class="field"><label>Estado</label><select name="estado"><option value="na" ${v.estado === 'na' ? 'selected' : ''}>não se aplica</option><option value="cru" ${v.estado === 'cru' ? 'selected' : ''}>cru</option><option value="cozido" ${v.estado === 'cozido' ? 'selected' : ''}>cozido</option></select></div>
       </div>
       ${a && a.fonte ? `<p class="help" style="margin-top:0">Valores de origem: <b>${esc(a.fonte)}</b>. Se editar, eles passam a ser seus.</p>` : ''}
+      ${v.obs ? `<p class="help" style="margin-top:0;background:var(--warn-soft);padding:8px 10px;border-radius:8px">${esc(v.obs)}</p>` : ''}
       <p class="help" style="margin-top:0">Os valores abaixo valem para a <b>quantidade de referência</b> (ex.: 100 g, 100 ml ou 1 porção). Copie do rótulo.</p>
       <div class="grid2">
         <div class="field"><label>Quantidade de referência</label><input name="refQtd" inputmode="decimal" value="${fmt(v.refQtd, 3)}" required></div>
@@ -526,7 +540,7 @@ function folhaAlimento(id, inicial = {}, aoSalvar) {
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       const campos = { nome: form.nome.value.trim(), marca: form.marca.value.trim(), estado: form.estado.value, refQtd: num(form.refQtd.value), refUnidade: form.refUnidade.value,
-        kcal: num(form.kcal.value), prot: num(form.prot.value), carb: num(form.carb.value), gord: num(form.gord.value), medidas, favorito: form.favorito.checked };
+        kcal: num(form.kcal.value), prot: num(form.prot.value), carb: num(form.carb.value), gord: num(form.gord.value), medidas, favorito: form.favorito.checked, obs: v.obs || '' };
       if (!campos.nome) { toast('Informe o nome.'); return; }
       if (!(campos.refQtd > 0)) { toast('Quantidade de referência deve ser maior que zero.'); return; }
       for (const k of ['kcal', 'prot', 'carb', 'gord']) if (!(campos[k] >= 0)) { toast(`Valor inválido em ${k}. Use números (vírgula ou ponto).`); return; }
@@ -686,13 +700,24 @@ function importarJSON(arquivo) {
 
 // ---------- Alimentos comuns (TACO) ----------
 function importarAlimentosBase() {
-  const existentes = new Set(D.alimentos.map((a) => a.nome.toLowerCase()));
-  const novos = ALIMENTOS_BASE.filter((b) => !existentes.has(b.nome.toLowerCase()));
-  if (!novos.length) { toast('Esses alimentos já estão cadastrados.'); return; }
-  if (!confirmar(`Adicionar ${novos.length} alimento(s) da ${FONTE_TACO}, por 100 g?\n\n${novos.map((b) => `• ${b.nome}`).join('\n')}\n\nVocê pode conferir e corrigir cada valor depois.`)) return;
-  for (const b of novos) D.alimentos.push({ id: uid(), nome: b.nome, marca: '', estado: b.estado, refQtd: 100, refUnidade: 'g', kcal: b.kcal, prot: b.prot, carb: b.carb, gord: b.gord, medidas: [], favorito: false, fonte: FONTE_TACO, criadoEm: new Date().toISOString() });
+  const porNome = new Map(D.alimentos.map((a) => [a.nome.toLowerCase(), a]));
+  const novos = ALIMENTOS_BASE.filter((b) => !porNome.has(b.nome.toLowerCase()));
+  // Itens já importados antes sem medida ganham a medida sugerida (só se não têm nenhuma).
+  const completar = ALIMENTOS_BASE.filter((b) => porNome.has(b.nome.toLowerCase()) && b.medidas && !porNome.get(b.nome.toLowerCase()).medidas.length);
+  if (!novos.length && !completar.length) { toast('Esses alimentos já estão cadastrados.'); return; }
+  const desc = (b) => `• ${b.nome}${b.medidas ? ` — ${b.medidas.map((m) => `1 ${m.nome} ≈ ${m.equivale} g`).join(', ')}` : ''}`;
+  const msg = [novos.length ? `Adicionar ${novos.length} alimento(s) da ${FONTE_TACO}, por 100 g:\n${novos.map(desc).join('\n')}` : '',
+    completar.length ? `Acrescentar medida caseira em:\n${completar.map(desc).join('\n')}` : '',
+    'Pesos por unidade são médias aproximadas: confira pesando. Você pode corrigir qualquer valor depois.'].filter(Boolean).join('\n\n');
+  if (!confirmar(msg)) return;
+  for (const b of novos) D.alimentos.push({ id: uid(), nome: b.nome, marca: '', estado: b.estado, refQtd: 100, refUnidade: 'g', kcal: b.kcal, prot: b.prot, carb: b.carb, gord: b.gord, medidas: (b.medidas || []).map((m) => ({ ...m })), favorito: false, fonte: FONTE_TACO, obs: b.obs || '', criadoEm: new Date().toISOString() });
+  for (const b of completar) { const a = porNome.get(b.nome.toLowerCase()); a.medidas = b.medidas.map((m) => ({ ...m })); if (!a.obs) a.obs = b.obs || ''; }
   D.alimentos.sort((x, y) => x.nome.localeCompare(y.nome, 'pt-BR'));
-  salvar(); UI.aba = 'alimentos'; UI.filtroAlimentos = 'todos'; render(); toast(`${novos.length} alimento(s) adicionado(s).`);
+  salvar(); UI.aba = 'alimentos'; UI.filtroAlimentos = 'todos'; render(); toast(`${novos.length} adicionado(s), ${completar.length} completado(s).`);
+}
+function novoDeModelo(i) {
+  const m = MODELOS_BASE[i];
+  folhaAlimento(null, { nome: m.nome, refQtd: m.refQtd, refUnidade: m.refUnidade, medidas: m.medidas.map((x) => ({ ...x })), obs: m.obs });
 }
 
 // ---------- Demonstração ----------
@@ -752,6 +777,7 @@ document.addEventListener('click', (e) => {
     'importar-json': () => $('[data-act="arquivo-json"]').click(),
     'alternar-demo': alternarDemo,
     'importar-base': importarAlimentosBase,
+    'modelo': () => novoDeModelo(Number(el.dataset.i)),
     'apagar-tudo': () => { if (!confirmar('Apagar TODOS os alimentos, receitas e registros deste modo? Não dá para desfazer. Exporte um backup antes, se quiser.')) return; if (!confirmar('Confirma mesmo? Última chance.')) return; D = dadosVazios(); salvar(); render(); toast('Dados apagados.'); },
   };
   if (acoes[act]) acoes[act]();
