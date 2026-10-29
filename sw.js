@@ -1,6 +1,6 @@
 // Service worker: guarda a "casca" do app para abrir offline.
 // Ao mudar qualquer arquivo, suba a versão para que o cache antigo seja descartado.
-const VERSAO = 'meu-prato-v10';
+const VERSAO = 'meu-prato-v11';
 const ARQUIVOS = [
   './', './index.html', './styles.css', './app.js', './manifest.webmanifest',
   './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png'

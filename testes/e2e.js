@@ -41,7 +41,7 @@ const URL = 'http://127.0.0.1:8765/index.html';
   await p.click('.sheet [data-act=pick-alimento]');
   await p.fill('.sheet [name=qtd]', '150');
   await p.screenshot({ path: SHOT + '/03-quantidade.png' });
-  assert.equal(await txt('.sheet .preview'), '300 kcal 15 g prot 30 g carb 7,5 g gord');
+  assert((await txt('.sheet .preview')).startsWith('300 kcal 15 g prot 30 g carb 7,5 g gord'));
   await p.click('.sheet [data-ok]');
   await p.waitForSelector('.entry');
   console.log('almoço:', await txt('.meal[data-idx="1"] .meal-sub'));
@@ -113,7 +113,7 @@ const URL = 'http://127.0.0.1:8765/index.html';
 
   // 8. Histórico
   await p.click('.tab[data-tab=historico]'); await p.screenshot({ path: SHOT + '/06-historico.png', fullPage: true });
-  const hist = await txt('.card p.help'); console.log('histórico:', hist); assert(hist.startsWith('1 de 7'));
+  const hist = await txt('.card p.help >> nth=1'); console.log('histórico:', hist); assert(hist.startsWith('1 de 7'));
 
   // 9. Exportar JSON / CSV e importar
   await p.click('.tab[data-tab=config]'); await p.screenshot({ path: SHOT + '/07-config.png', fullPage: true });
@@ -138,7 +138,7 @@ const URL = 'http://127.0.0.1:8765/index.html';
   // 10. Modo demonstração isolado
   await p.click('.tab[data-tab=config]'); await p.click('[data-act=alternar-demo]'); await p.waitForSelector('#demo-banner:not([hidden])');
   assert.equal(await p.locator('.entry').count(), 0); // hoje vazio no demo
-  await p.click('.tab[data-tab=historico]'); console.log('demo histórico:', await txt('.card p.help'));
+  await p.click('.tab[data-tab=historico]'); console.log('demo histórico:', await txt('.card p.help >> nth=1'));
   await p.screenshot({ path: SHOT + '/08-demo-historico.png', fullPage: true });
   await p.click('.tab[data-tab=config]'); await p.click('[data-act=alternar-demo]'); await p.click('.tab[data-tab=hoje]');
   assert.equal(await p.locator('.entry').count(), 3); assert(await p.locator('#demo-banner').isHidden());

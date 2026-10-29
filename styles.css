@@ -135,3 +135,10 @@ hr.sep { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
 .marca { width: 24px; height: 24px; border-radius: 6px; border: 2px solid var(--line); flex: none; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; color: var(--brand-ink); margin-right: 4px; }
 .marca.on { background: var(--brand); border-color: var(--brand); }
 .toast.topo { bottom: auto; top: calc(12px + env(safe-area-inset-top)); }
+
+.tabela { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
+.tabela th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12px; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.tabela td { padding: 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.tabela td:first-child { color: var(--muted); }
+.bar { position: relative; }
+.meta-marca { position: absolute; top: -3px; width: 2px; height: 12px; background: var(--ink); opacity: .5; }

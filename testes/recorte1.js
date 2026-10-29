@@ -6,8 +6,8 @@ const URL = 'http://127.0.0.1:8765/index.html';
   const txt = async (sel) => (await p.locator(sel).first().innerText()).replace(/\s+/g, ' ').trim();
   await p.goto(URL);
   // service worker real: cache com os arquivos
-  await p.waitForFunction(async () => (await caches.keys()).includes('meu-prato-v10') && (await (await caches.open('meu-prato-v10')).keys()).length >= 5, null, { timeout: 15000 }).catch(async () => console.log('SW estado:', await p.evaluate(async () => { const r = await navigator.serviceWorker.getRegistration(); return r ? [r.installing?.state, r.waiting?.state, r.active?.state].join('/') : 'sem registro'; })));
-  const cached = await p.evaluate(async () => (await (await caches.open('meu-prato-v10')).keys()).map(r => r.url.split('/').pop()));
+  await p.waitForFunction(async () => (await caches.keys()).includes('meu-prato-v11') && (await (await caches.open('meu-prato-v11')).keys()).length >= 5, null, { timeout: 15000 }).catch(async () => console.log('SW estado:', await p.evaluate(async () => { const r = await navigator.serviceWorker.getRegistration(); return r ? [r.installing?.state, r.waiting?.state, r.active?.state].join('/') : 'sem registro'; })));
+  const cached = await p.evaluate(async () => (await (await caches.open('meu-prato-v11')).keys()).map(r => r.url.split('/').pop()));
   console.log('cache SW:', cached.join(', ')); assert(cached.includes('app.js') && cached.includes('styles.css'));
   // 1. busca sem acento, ordem livre, nome antes de marca
   await p.click('.tab[data-tab=config]'); await p.click('[data-act=importar-base]'); await p.waitForSelector('.list-item');

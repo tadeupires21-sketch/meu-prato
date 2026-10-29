@@ -14,6 +14,19 @@ const CHAVE_DEMO = 'meuprato.demo.v1';
 const CHAVE_MODO = 'meuprato.modo';
 const VERSAO_DADOS = 1;
 const REFEICOES_PADRAO = ['Café da manhã', 'Almoço', 'Lanche', 'Jantar'];
+// Definição central dos nutrientes. Os quatro primeiros são obrigatórios no cadastro; os opcionais podem ser
+// null = "não informado" (diferente de 0). Somas só consideram valores conhecidos e informam a cobertura.
+const NUTR = [
+  { k: 'kcal', nome: 'Calorias', un: 'kcal', dec: 0, obrigatorio: true, meta: 'meta' },
+  { k: 'prot', nome: 'Proteínas', un: 'g', dec: 1, obrigatorio: true, meta: 'meta' },
+  { k: 'carb', nome: 'Carboidratos', un: 'g', dec: 1, obrigatorio: true, meta: 'meta' },
+  { k: 'gord', nome: 'Gorduras', un: 'g', dec: 1, obrigatorio: true, meta: 'meta' },
+  { k: 'fibra', nome: 'Fibras', un: 'g', dec: 1, obrigatorio: false, meta: 'meta' },
+  { k: 'sodio', nome: 'Sódio', un: 'mg', dec: 0, obrigatorio: false, meta: 'limite' },
+];
+const NUTR_OBRIG = NUTR.filter((n) => n.obrigatorio).map((n) => n.k);
+const NUTR_OPC = NUTR.filter((n) => !n.obrigatorio).map((n) => n.k);
+const METAS_VAZIAS = () => Object.fromEntries(NUTR.map((n) => [n.k, null]));
 // Alimentos comuns, por 100 g de parte comestível, copiados da TACO 4ª edição (NEPA/Unicamp, 2011).
 // Entram como cadastro normal (editável) e levam o campo `fonte`. Sem medidas caseiras de propósito:
 // peso de "1 unidade" ou "1 colher" varia, então o usuário cadastra a equivalência que pesou.
@@ -77,7 +90,7 @@ const MODELOS_BASE = [
 function dadosVazios() {
   return {
     versao: VERSAO_DADOS,
-    config: { metas: { kcal: 2000, prot: 120, carb: null, gord: null }, refeicoesPadrao: [...REFEICOES_PADRAO], consultarOFF: true, metaAgua: 2000, copoAgua: 250 },
+    config: { metas: METAS_VAZIAS(), historicoMetas: [], refeicoesPadrao: [...REFEICOES_PADRAO], consultarOFF: true, metaAgua: 2000, copoAgua: 250 },
     alimentos: [], receitas: [], dias: {}, recentes: [], porcoes: {}, combinacoes: []
   };
 }
@@ -127,6 +140,12 @@ function normalizar(obj) {
   const base = dadosVazios();
   obj.config = Object.assign(base.config, obj.config || {});
   obj.config.metas = Object.assign(base.config.metas, obj.config.metas || {});
+  for (const k of NUTR_OPC) if (obj.config.metas[k] === undefined) obj.config.metas[k] = null;
+  // Vigência das metas: quem já tinha metas antes deste recurso recebe um registro "desde sempre", marcado como
+  // anterior à vigência (não é inferência de valor: é a meta que estava em uso de fato).
+  if (!Array.isArray(obj.config.historicoMetas)) obj.config.historicoMetas = [];
+  if (!obj.config.historicoMetas.length && Object.values(obj.config.metas).some((v) => v != null)) obj.config.historicoMetas.push({ desde: '1970-01-01', metas: { ...obj.config.metas }, origem: 'anterior ao registro de vigência' });
+  obj.config.historicoMetas.sort((a, b) => a.desde.localeCompare(b.desde));
   if (typeof obj.config.consultarOFF !== 'boolean') obj.config.consultarOFF = true;
   if (!(obj.config.metaAgua > 0)) obj.config.metaAgua = 2000;
   if (!(obj.config.copoAgua > 0)) obj.config.copoAgua = 250;
@@ -154,8 +173,11 @@ function validarDados(obj) {
     const m = obj.config.metas;
     if (m !== undefined) {
       if (!ehObj(m)) return { ok: false, erro: 'metas inválidas' };
-      for (const k of ['kcal', 'prot']) if (m[k] !== undefined && !(ehNum(m[k]) && m[k] > 0)) return { ok: false, erro: `meta de ${k} inválida` };
-      for (const k of ['carb', 'gord']) if (m[k] != null && !ehNumNaoNeg(m[k])) return { ok: false, erro: `meta de ${k} inválida` };
+      for (const k of NUTR.map((n) => n.k)) if (m[k] != null && !ehNumNaoNeg(m[k])) return { ok: false, erro: `meta de ${k} inválida` };
+    }
+    if (obj.config.historicoMetas !== undefined) {
+      if (!Array.isArray(obj.config.historicoMetas)) return { ok: false, erro: 'histórico de metas inválido' };
+      for (const h of obj.config.historicoMetas) { if (!ehObj(h) || !/^\d{4}-\d{2}-\d{2}$/.test(h.desde) || !ehObj(h.metas)) return { ok: false, erro: 'vigência de meta inválida' }; for (const k of Object.keys(h.metas)) if (h.metas[k] != null && !ehNumNaoNeg(h.metas[k])) return { ok: false, erro: `vigência com ${k} inválido` }; }
     }
     for (const k of ['metaAgua', 'copoAgua']) if (obj.config[k] !== undefined && !(ehNum(obj.config[k]) && obj.config[k] > 0)) return { ok: false, erro: `${k} inválida` };
     if (obj.config.refeicoesPadrao !== undefined && (!Array.isArray(obj.config.refeicoesPadrao) || obj.config.refeicoesPadrao.some((n) => typeof n !== 'string'))) return { ok: false, erro: 'refeições padrão inválidas' };
@@ -173,7 +195,8 @@ function validarDados(obj) {
     if (typeof a.nome !== 'string' || !a.nome.trim()) return { ok: false, erro: `alimento ${a.id} sem nome` };
     if (!(ehNum(a.refQtd) && a.refQtd > 0)) return { ok: false, erro: `alimento "${a.nome}" com quantidade de referência inválida` };
     if (!['g', 'ml', 'porção'].includes(a.refUnidade)) return { ok: false, erro: `alimento "${a.nome}" com unidade de referência inválida` };
-    for (const k of ['kcal', 'prot', 'carb', 'gord']) if (!ehNumNaoNeg(a[k])) return { ok: false, erro: `alimento "${a.nome}" com ${k} inválido` };
+    for (const k of NUTR_OBRIG) if (!ehNumNaoNeg(a[k])) return { ok: false, erro: `alimento "${a.nome}" com ${k} inválido` };
+    for (const k of NUTR_OPC) if (a[k] != null && !ehNumNaoNeg(a[k])) return { ok: false, erro: `alimento "${a.nome}" com ${k} inválido` };
     const em = validarMedidas(a.medidas, a.nome); if (em) return { ok: false, erro: em };
   }
   for (const r of obj.receitas) {
@@ -185,7 +208,8 @@ function validarDados(obj) {
     if (!Array.isArray(r.ingredientes)) return { ok: false, erro: `receita "${r.nome}" sem lista de ingredientes` };
     for (const ing of r.ingredientes) {
       if (!ehObj(ing) || !(ehNum(ing.qtd) && ing.qtd > 0) || typeof ing.unidade !== 'string') return { ok: false, erro: `ingrediente inválido em "${r.nome}"` };
-      for (const k of ['kcal', 'prot', 'carb', 'gord']) if (!ehNumNaoNeg(ing[k])) return { ok: false, erro: `ingrediente com ${k} inválido em "${r.nome}"` };
+      for (const k of NUTR_OBRIG) if (!ehNumNaoNeg(ing[k])) return { ok: false, erro: `ingrediente com ${k} inválido em "${r.nome}"` };
+      for (const k of NUTR_OPC) if (ing[k] != null && !ehNumNaoNeg(ing[k])) return { ok: false, erro: `ingrediente com ${k} inválido em "${r.nome}"` };
     }
   }
   for (const [data, dia] of Object.entries(obj.dias)) {
@@ -196,7 +220,8 @@ function validarDados(obj) {
       for (const it of r.itens) {
         if (!ehObj(it) || typeof it.rotulo !== 'string' || typeof it.unidade !== 'string') return { ok: false, erro: `item inválido em ${data}` };
         if (!(ehNum(it.qtd) && it.qtd > 0)) return { ok: false, erro: `item com quantidade inválida em ${data}` };
-        for (const k of ['kcal', 'prot', 'carb', 'gord']) if (!ehNumNaoNeg(it[k])) return { ok: false, erro: `item com ${k} inválido em ${data}` };
+        for (const k of NUTR_OBRIG) if (!ehNumNaoNeg(it[k])) return { ok: false, erro: `item com ${k} inválido em ${data}` };
+        for (const k of NUTR_OPC) if (it[k] != null && !ehNumNaoNeg(it[k])) return { ok: false, erro: `item com ${k} inválido em ${data}` };
       }
     }
     if (dia.agua !== undefined && (!Array.isArray(dia.agua) || dia.agua.some((a) => !ehObj(a) || !(ehNum(a.ml) && a.ml > 0)))) return { ok: false, erro: `registro de água inválido em ${data}` };
@@ -207,7 +232,8 @@ function validarDados(obj) {
     for (const c of obj.combinacoes) {
       if (!ehObj(c) || typeof c.id !== 'string' || typeof c.nome !== 'string' || !c.nome.trim() || !Array.isArray(c.itens) || !c.itens.length) return { ok: false, erro: 'combinação inválida' };
       for (const it of c.itens) { if (!ehObj(it) || !['alimento', 'receita'].includes(it.tipo) || typeof it.refId !== 'string' || typeof it.rotulo !== 'string' || !(ehNum(it.qtd) && it.qtd > 0) || typeof it.unidade !== 'string') return { ok: false, erro: `item inválido na combinação "${c.nome}"` };
-        for (const k of ['kcal', 'prot', 'carb', 'gord']) if (!ehNumNaoNeg(it[k])) return { ok: false, erro: `item com ${k} inválido na combinação "${c.nome}"` }; }
+        for (const k of NUTR_OBRIG) if (!ehNumNaoNeg(it[k])) return { ok: false, erro: `item com ${k} inválido na combinação "${c.nome}"` };
+        for (const k of NUTR_OPC) if (it[k] != null && !ehNumNaoNeg(it[k])) return { ok: false, erro: `item com ${k} inválido na combinação "${c.nome}"` }; }
     }
   }
   if (obj.porcoes !== undefined) {
@@ -230,7 +256,17 @@ function rotuloData(iso) {
 }
 function dataCurta(iso) { const [a, m, d] = iso.split('-').map(Number); return new Date(a, m - 1, d).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' }).replace('.', ''); }
 function fmt(n, dec = 0) { if (n == null || !isFinite(n)) return '–'; return Number(n).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: dec }); }
-function num(str) { if (typeof str === 'number') return str; if (str == null) return NaN; const s = String(str).trim().replace(/\s/g, '').replace(',', '.'); if (s === '') return NaN; return Number(s); }
+// Aceita "1,5", "1.5", "2.000" (milhar pt-BR) e "1.234,5". Ponto só é decimal quando não houver vírgula e não
+// casar com o padrão de milhar.
+function num(str) {
+  if (typeof str === 'number') return str; if (str == null) return NaN;
+  let t = String(str).trim().replace(/\s/g, ''); if (t === '') return NaN;
+  if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.');
+  else if (/^-?\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '');
+  return Number(t);
+}
+// Valor para dentro de <input>: sem separador de milhar, para o que se mostra ser o que se lê de volta.
+function fmtIn(n, dec = 2) { if (n == null || !isFinite(n)) return ''; return Number(n).toLocaleString('pt-BR', { useGrouping: false, minimumFractionDigits: 0, maximumFractionDigits: dec }); }
 // Busca: ignora acentos, caixa e ordem das palavras; nome vale mais que marca.
 function normTexto(t) { return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim(); }
 function pontuarBusca(q, nome, marca = '') {
@@ -271,15 +307,25 @@ function nutrientesAlimento(a, qtd, unidade) {
   const u = unidadesAlimento(a).find((x) => x.nome === unidade);
   if (!u) throw new Error(`Medida "${unidade}" sem equivalência cadastrada para ${a.nome}`);
   const fator = (qtd * u.fator) / a.refQtd;
-  return { kcal: a.kcal * fator, prot: a.prot * fator, carb: a.carb * fator, gord: a.gord * fator };
+  return escalar(a, fator);
 }
-function somar(lista) { return lista.reduce((s, n) => ({ kcal: s.kcal + n.kcal, prot: s.prot + n.prot, carb: s.carb + n.carb, gord: s.gord + n.gord }), { kcal: 0, prot: 0, carb: 0, gord: 0 }); }
+// Multiplica os nutrientes de um objeto por um fator; opcionais desconhecidos (null/undefined) continuam null.
+function escalar(o, f) { const r = {}; for (const k of NUTR_OBRIG) r[k] = (o[k] || 0) * f; for (const k of NUTR_OPC) r[k] = o[k] == null ? null : o[k] * f; return r; }
+// Soma uma lista de nutrientes. Opcionais: soma só o conhecido e informa cobertura em `cob[k] = { conhecidos, total }`.
+function somar(lista) {
+  const s = { kcal: 0, prot: 0, carb: 0, gord: 0, fibra: 0, sodio: 0, cob: {} };
+  for (const k of NUTR_OPC) s.cob[k] = { conhecidos: 0, total: lista.length };
+  for (const n of lista) { for (const k of NUTR_OBRIG) s[k] += n[k] || 0; for (const k of NUTR_OPC) if (n[k] != null) { s[k] += n[k]; s.cob[k].conhecidos++; } }
+  return s;
+}
+// Resultado de somar() convertido em "nutrientes de um item": opcional só é conhecido se todos os componentes eram.
+function fecharSoma(s) { const r = {}; for (const k of NUTR_OBRIG) r[k] = s[k]; for (const k of NUTR_OPC) r[k] = s.cob[k].total > 0 && s.cob[k].conhecidos === s.cob[k].total ? s[k] : null; return r; }
 // Receita: totais calculados dos ingredientes. Usa o alimento atual se existir; senão o snapshot do ingrediente.
 function totaisReceita(r) {
   return somar(r.ingredientes.map((ing) => {
     const a = D.alimentos.find((x) => x.id === ing.alimentoId);
     if (a) { try { return nutrientesAlimento(a, ing.qtd, ing.unidade); } catch { /* medida removida: usa snapshot */ } }
-    return { kcal: ing.kcal, prot: ing.prot, carb: ing.carb, gord: ing.gord };
+    return escalar(ing, 1);
   }));
 }
 function unidadesReceita(r) { const u = [{ nome: 'porção', fator: null }]; if (r.pesoFinal > 0) u.push({ nome: 'g', fator: null }); return u; }
@@ -289,7 +335,7 @@ function nutrientesReceita(r, qtd, unidade) {
   if (unidade === 'porção') f = qtd / r.porcoes;
   else if (unidade === 'g' && r.pesoFinal > 0) f = qtd / r.pesoFinal;
   else throw new Error('Unidade inválida para receita');
-  return { kcal: t.kcal * f, prot: t.prot * f, carb: t.carb * f, gord: t.gord * f };
+  return escalar(fecharSoma(t), f); // incompletude dos ingredientes se propaga: fibra/sódio só se todos informaram
 }
 function rotuloAlimento(a) { return a.marca ? `${a.nome} (${a.marca})` : a.nome; }
 
@@ -300,6 +346,13 @@ function obterDia(iso, criar = true) {
   return dia;
 }
 function diaTemRegistro(dia) { return !!dia && dia.refeicoes.some((r) => r.itens.length > 0); }
+// Metas vigentes numa data: o último registro com desde <= data. Sem registro anterior, não há referência (tudo null).
+function metasEm(iso) {
+  const h = D.config.historicoMetas || []; let m = null;
+  for (const x of h) if (x.desde <= iso) m = x.metas; else break;
+  return m ? { ...METAS_VAZIAS(), ...m } : METAS_VAZIAS();
+}
+function temAlgumaMeta(m) { return Object.values(m).some((v) => v != null && v > 0); }
 function aguaDia(dia) { return dia && Array.isArray(dia.agua) ? dia.agua.reduce((t, a) => t + a.ml, 0) : 0; }
 function cartaoAgua(dia) {
   const total = aguaDia(dia), meta = D.config.metaAgua, copo = D.config.copoAgua;
@@ -364,13 +417,14 @@ function render() {
 function telaHoje() {
   const dia = obterDia(UI.data, false);
   const t = totaisDia(dia);
-  const m = D.config.metas;
-  const saldo = m.kcal - t.kcal;
-  const saldoTxt = saldo >= 0 ? `${fmt(saldo)} kcal disponíveis` : `${fmt(-saldo)} kcal além da meta`;
-  const protSaldo = m.prot - t.prot;
-  const protTxt = protSaldo >= 0 ? `faltam ${fmt(protSaldo)} g` : `${fmt(-protSaldo)} g além da meta`;
+  const m = metasEm(UI.data);
+  const saldoTxt = m.kcal ? ((m.kcal - t.kcal) >= 0 ? `${fmt(m.kcal - t.kcal)} kcal disponíveis` : `${fmt(t.kcal - m.kcal)} kcal além da meta`) : 'sem meta definida';
+  const protTxt = m.prot ? ((m.prot - t.prot) >= 0 ? `faltam ${fmt(m.prot - t.prot)} g` : `${fmt(t.prot - m.prot)} g além da meta`) : 'sem meta definida';
   const pct = (v, meta) => meta > 0 ? Math.min(100, (v / meta) * 100) : 0;
   const macro = (nome, v, meta, k) => `<button class="macro-btn" data-act="detalhe" data-n="${k}"><span class="muted">${nome}</span> <b>${fmt(v)} g</b>${meta ? `<span class="muted"> de ${fmt(meta)}</span>` : ''}</button>`;
+  const nItens = dia ? dia.refeicoes.reduce((a, r) => a + r.itens.length, 0) : 0;
+  const opc = (k) => { const d = NUTR.find((n) => n.k === k); const c = t.cob[k]; const txt = nItens === 0 ? '–' : c.conhecidos === 0 ? 'não informado' : `${fmt(t[k], d.dec)} ${d.un}`; const cobTxt = nItens && c.conhecidos < c.total ? ` <span class="muted small">(dados em ${c.conhecidos} de ${c.total})</span>` : ''; return `<button class="macro-btn" data-act="detalhe" data-n="${k}"><span class="muted">${d.nome}</span> <b>${txt}</b>${m[k] && c.conhecidos ? `<span class="muted"> de ${fmt(m[k], d.dec)}</span>` : ''}${cobTxt}</button>`; };
+  const semMetas = !temAlgumaMeta(m);
   const refeicoes = (dia ? dia.refeicoes : D.config.refeicoesPadrao.map((n) => ({ id: null, nome: n, itens: [] })));
   return `
   <div class="topbar">
@@ -384,10 +438,12 @@ function telaHoje() {
   ${UI.data !== hojeISO() ? `<button class="btn sm full" data-act="ir-hoje" style="margin-bottom:10px">Voltar para hoje</button>` : ''}
   <section class="card">
     <div class="summary">
-      <button class="stat" data-act="detalhe" data-n="kcal"><div class="label">Calorias</div><div class="value">${fmt(t.kcal)}</div><div class="sub muted">de ${fmt(m.kcal)} kcal</div><div class="sub">${saldoTxt}</div><div class="bar"><span style="width:${pct(t.kcal, m.kcal)}%"></span></div></button>
-      <button class="stat prot" data-act="detalhe" data-n="prot"><div class="label">Proteínas</div><div class="value">${fmt(t.prot)} <small>g</small></div><div class="sub muted">de ${fmt(m.prot, 1)} g</div><div class="sub">${protTxt}</div><div class="bar"><span style="width:${pct(t.prot, m.prot)}%"></span></div></button>
+      <button class="stat" data-act="detalhe" data-n="kcal"><div class="label">Calorias</div><div class="value">${fmt(t.kcal)}${m.kcal ? '' : ' <small>kcal</small>'}</div>${m.kcal ? `<div class="sub muted">de ${fmt(m.kcal)} kcal</div>` : ''}<div class="sub">${saldoTxt}</div>${m.kcal ? `<div class="bar"><span style="width:${pct(t.kcal, m.kcal)}%"></span></div>` : ''}</button>
+      <button class="stat prot" data-act="detalhe" data-n="prot"><div class="label">Proteínas</div><div class="value">${fmt(t.prot)} <small>g</small></div>${m.prot ? `<div class="sub muted">de ${fmt(m.prot, 1)} g</div>` : ''}<div class="sub">${protTxt}</div>${m.prot ? `<div class="bar"><span style="width:${pct(t.prot, m.prot)}%"></span></div>` : ''}</button>
     </div>
-    <div class="macros">${macro('Carboidratos', t.carb, m.carb, 'carb')}${macro('Gorduras', t.gord, m.gord, 'gord')}<span class="muted small" style="margin-left:auto">toque para detalhar</span></div>
+    <div class="macros">${macro('Carboidratos', t.carb, m.carb, 'carb')}${macro('Gorduras', t.gord, m.gord, 'gord')}</div>
+    <div class="macros opc" style="margin-top:6px">${opc('fibra')}${opc('sodio')}<span class="muted small" style="margin-left:auto">toque para detalhar</span></div>
+    ${semMetas ? `<p class="help" style="margin:10px 0 0">Sem metas para ${UI.data === hojeISO() ? 'hoje' : 'esta data'}. Metas são referências que você escolhe, não uma recomendação do app. <button class="btn sm" data-act="ir-config" style="margin-left:6px">Definir em Ajustes</button></p>` : ''}
   </section>
   ${cartaoAgua(dia)}
   ${refeicoes.map((r, i) => {
@@ -442,55 +498,69 @@ function itemListaReceita(r, act, extra = '') {
 }
 
 // ---------- Tela: Histórico ----------
-function telaHistorico() {
-  const n = UI.histDias; const hoje = hojeISO(); const m = D.config.metas;
-  const linhas = []; let concl = 0; const acum = { kcal: 0, prot: 0 }; let maxK = m.kcal || 1;
+// Resumo de um período de n dias terminando em `fim`: médias só de dias concluídos, com denominadores explícitos.
+function resumoPeriodo(fim, n) {
+  const r = { n, concl: 0, comRef: 0, soAgua: 0, semReg: 0, comAgua: 0, soma: { kcal: 0, prot: 0, carb: 0, gord: 0, fibra: 0, sodio: 0, agua: 0 }, completos: { fibra: 0, sodio: 0 }, linhas: [] };
   for (let i = 0; i < n; i++) {
-    const iso = somarDias(hoje, -i); const dia = D.dias[iso]; const tem = diaTemRegistro(dia); const t = totaisDia(dia);
-    if (tem && dia.concluido) { concl++; acum.kcal += t.kcal; acum.prot += t.prot; }
-    if (t.kcal > maxK) maxK = t.kcal;
-    linhas.push({ iso, dia, tem, t });
+    const iso = somarDias(fim, -i); const dia = D.dias[iso]; const tem = diaTemRegistro(dia); const t = totaisDia(dia); const ml = aguaDia(dia);
+    if (!tem && !ml) r.semReg++; else if (!tem) r.soAgua++;
+    if (dia && dia.concluido && (tem || ml)) {
+      r.concl++;
+      if (tem) { r.comRef++; for (const k of NUTR_OBRIG) r.soma[k] += t[k]; for (const k of NUTR_OPC) if (t.cob[k].conhecidos === t.cob[k].total) { r.soma[k] += t[k]; r.completos[k]++; } }
+      if (ml) { r.comAgua++; r.soma.agua += ml; }
+    }
+    r.linhas.push({ iso, dia, tem, t, ml, m: metasEm(iso) });
   }
-  const media = concl ? { kcal: acum.kcal / concl, prot: acum.prot / concl } : null;
+  r.media = (k) => k === 'agua' ? (r.comAgua ? r.soma.agua / r.comAgua : null) : NUTR_OPC.includes(k) ? (r.completos[k] ? r.soma[k] / r.completos[k] : null) : (r.comRef ? r.soma[k] / r.comRef : null);
+  r.denom = (k) => k === 'agua' ? r.comAgua : NUTR_OPC.includes(k) ? r.completos[k] : r.comRef;
+  return r;
+}
+function telaHistorico() {
+  const n = UI.histDias; const hoje = hojeISO();
+  const atual = resumoPeriodo(hoje, n); const anterior = resumoPeriodo(somarDias(hoje, -n), n);
+  let maxK = Math.max(1, ...atual.linhas.map((l) => l.t.kcal), ...atual.linhas.map((l) => l.m.kcal || 0));
+  const linhaMedia = (k, nome, un, dec) => { const a = atual.media(k), b = anterior.media(k); return `<tr><td>${nome}</td><td><b>${a == null ? '–' : fmt(a, dec) + ' ' + un}</b><div class="small muted">${atual.denom(k)} ${atual.denom(k) === 1 ? 'dia' : 'dias'}</div></td><td>${b == null ? '–' : fmt(b, dec) + ' ' + un}<div class="small muted">${anterior.denom(k)} ${anterior.denom(k) === 1 ? 'dia' : 'dias'}</div></td></tr>`; };
   return `<div class="topbar"><h1 class="title">Histórico</h1></div>
   <div class="chips">${[7, 30].map((k) => `<button class="chip ${n === k ? 'active' : ''}" data-act="hist-dias" data-n="${k}">Últimos ${k} dias</button>`).join('')}</div>
   <section class="card">
-    <h2>Média dos dias concluídos</h2>
-    ${media ? `<div class="summary" style="margin-top:10px"><div class="stat"><div class="label">Calorias / dia</div><div class="value">${fmt(media.kcal)}</div></div><div class="stat prot"><div class="label">Proteínas / dia</div><div class="value">${fmt(media.prot)} <small>g</small></div></div></div>` : ''}
-    <p class="help" style="margin-bottom:0">${concl ? `${concl} de ${n} dias marcados como concluídos entraram na média.` : `Nenhum dia concluído nos últimos ${n} dias. Marque “Dia concluído” na tela Hoje para incluir um dia na média.`}</p>
+    <h2>Médias dos dias concluídos</h2>
+    <p class="help">Só dias marcados como concluídos entram. Fibras e sódio: só dias em que todos os registros informaram o valor. Água: dias concluídos com água registrada. Cada média mostra seu próprio número de dias.</p>
+    ${atual.concl || anterior.concl ? `<table class="tabela"><thead><tr><th></th><th>Últimos ${n} dias</th><th>${n} anteriores</th></tr></thead><tbody>
+      ${linhaMedia('kcal', 'Calorias', 'kcal', 0)}${linhaMedia('prot', 'Proteínas', 'g', 0)}${linhaMedia('carb', 'Carboidratos', 'g', 0)}${linhaMedia('gord', 'Gorduras', 'g', 0)}${linhaMedia('fibra', 'Fibras', 'g', 1)}${linhaMedia('sodio', 'Sódio', 'mg', 0)}${linhaMedia('agua', 'Água', 'ml', 0)}
+    </tbody></table>` : ''}
+    <p class="help" style="margin-bottom:0">${atual.concl ? `${atual.comRef} de ${n} dias concluídos com refeições${atual.soAgua ? ` · ${atual.soAgua} só com água` : ''}${atual.semReg ? ` · ${atual.semReg} sem registro` : ''}. Dias sem registro não entram como zero.` : `Nenhum dia concluído nos últimos ${n} dias. Marque “Dia concluído” na tela Hoje para incluir um dia na média.`}</p>
   </section>
   <section class="card">
-    ${linhas.map(({ iso, dia, tem, t }) => `<button class="hist-row" style="width:100%;background:none;border:0;border-bottom:1px solid var(--line);text-align:left;color:inherit" data-act="abrir-dia" data-data="${iso}">
+    ${atual.linhas.map(({ iso, dia, tem, t, ml, m }) => `<button class="hist-row" style="width:100%;background:none;border:0;border-bottom:1px solid var(--line);text-align:left;color:inherit" data-act="abrir-dia" data-data="${iso}">
       <div class="d">${esc(dataCurta(iso))}</div>
-      ${tem || aguaDia(dia) ? `<div class="bars"><div class="small">${tem ? `${fmt(t.kcal)} kcal · <span style="color:var(--prot)">${fmt(t.prot)} g prot</span>` : '<span class="muted">Sem refeições</span>'}${aguaDia(dia) ? ` · <span style="color:var(--agua)">${fmt(aguaDia(dia))} ml</span>` : ''}</div><div class="bar"><span style="width:${Math.min(100, t.kcal / maxK * 100)}%"></span></div><div class="bar p"><span style="width:${m.prot ? Math.min(100, t.prot / m.prot * 100) : 0}%"></span></div></div>` : `<div class="muted small">Sem registros</div>`}
-      <div class="st">${tem ? (dia.concluido ? '<span class="badge">concluído</span>' : '<span class="badge neutral">em aberto</span>') : ''}</div>
+      ${tem || ml ? `<div class="bars"><div class="small">${tem ? `${fmt(t.kcal)} kcal · <span style="color:var(--prot)">${fmt(t.prot)} g prot</span>` : '<span class="muted">Só água</span>'}${ml ? ` · <span style="color:var(--agua)">${fmt(ml)} ml</span>` : ''}</div>${tem ? `<div class="bar"><span style="width:${Math.min(100, t.kcal / maxK * 100)}%"></span>${m.kcal ? `<i class="meta-marca" style="left:${Math.min(100, m.kcal / maxK * 100)}%"></i>` : ''}</div><div class="bar p"><span style="width:${m.prot ? Math.min(100, t.prot / m.prot * 100) : 0}%"></span></div>` : ''}</div>` : `<div class="muted small">Sem registros</div>`}
+      <div class="st">${tem || ml ? (dia.concluido ? '<span class="badge">concluído</span>' : '<span class="badge neutral">em aberto</span>') : ''}</div>
     </button>`).join('')}
+    <p class="help" style="margin:10px 0 0">Barra verde: calorias na escala do período, com a marca da meta vigente naquele dia. Barra azul: proteína em relação à meta do dia (sem meta, vazia).</p>
   </section>`;
 }
 
 // ---------- Tela: Configurações ----------
 function telaConfig() {
-  const m = D.config.metas;
+  const m = D.config.metas; const hm = D.config.historicoMetas || []; const vig = hm.length ? hm[hm.length - 1] : null;
   let usoKB = 0; try { usoKB = Math.round((localStorage.getItem(chaveAtual()) || '').length / 1024); } catch { /* ignore */ }
   return `<div class="topbar"><h1 class="title">Configurações</h1></div>
   <section class="card">
     <h2>Metas diárias</h2>
-    <p class="help">Defina você mesmo. Carboidratos e gorduras são opcionais.</p>
+    <p class="help">Referências escolhidas por você (com quem te orienta, se for o caso). O app não calcula dieta nem recomenda valores. Todas são opcionais: sem meta, a tela mostra só o consumo. Sódio funciona como limite.</p>
     <form data-form="metas">
       <div class="grid2">
-        <div class="field"><label>Calorias (kcal)</label><input name="kcal" inputmode="decimal" value="${fmt(m.kcal, 2)}" required></div>
-        <div class="field"><label>Proteínas (g)</label><input name="prot" inputmode="decimal" value="${fmt(m.prot, 2)}" required></div>
-        <div class="field"><label>Carboidratos (g) — opcional</label><input name="carb" inputmode="decimal" value="${m.carb ? fmt(m.carb, 2) : ''}"></div>
-        <div class="field"><label>Gorduras (g) — opcional</label><input name="gord" inputmode="decimal" value="${m.gord ? fmt(m.gord, 2) : ''}"></div>
+        ${NUTR.map((n) => `<div class="field"><label>${n.nome} (${n.un})${n.k === 'sodio' ? ' — limite' : ''}</label><input name="${n.k}" inputmode="decimal" value="${m[n.k] != null ? fmtIn(m[n.k], 2) : ''}" placeholder="sem meta"></div>`).join('')}
       </div>
-      <button class="btn primary full" type="submit">Salvar metas</button>
+      <button class="btn primary full" type="submit">Salvar metas a partir de hoje</button>
+      <p class="help" style="margin:8px 0 0">${vig ? `Vigência atual desde ${vig.desde === '1970-01-01' ? 'antes do registro de vigência' : dataCurta(vig.desde)}${hm.length > 1 ? ` · ${hm.length} alterações registradas` : ''}. Dias anteriores continuam comparados com a meta que valia neles.` : 'Nenhuma meta registrada ainda.'}</p>
     </form>
   </section>
   <section class="card">
     <h2>Água</h2>
     <form data-form="agua"><div class="grid2">
-      <div class="field"><label>Meta diária (ml)</label><input name="meta" inputmode="numeric" value="${fmt(D.config.metaAgua)}" required></div>
-      <div class="field"><label>Tamanho do copo (ml)</label><input name="copo" inputmode="numeric" value="${fmt(D.config.copoAgua)}" required></div>
+      <div class="field"><label>Meta diária (ml)</label><input name="meta" inputmode="numeric" value="${fmtIn(D.config.metaAgua)}" required></div>
+      <div class="field"><label>Tamanho do copo (ml)</label><input name="copo" inputmode="numeric" value="${fmtIn(D.config.copoAgua)}" required></div>
     </div><button class="btn full" type="submit">Salvar água</button></form>
   </section>
   <section class="card">
@@ -614,7 +684,7 @@ function folhaEscolher(idxRefeicao, aoEscolher, resumo = '') {
     $('[data-act="pick-codigo"]', s).addEventListener('click', () => folhaCodigo((a) => aoEscolher('alimento', a.id)));
     $$('.chip', s).forEach((c) => c.addEventListener('click', () => { filtro = c.dataset.f; busca = ''; $('.search', s).value = ''; desenhar(s); }));
     desenhar(s);
-    setTimeout(() => $('.search', s).focus(), 50);
+    $('.search', s).focus();
   });
 }
 
@@ -635,7 +705,7 @@ function folhaQuantidade({ tipo, id, item, idxRefeicao, aoConfirmar, aoContinuar
   abrirFolha(`${cab(item ? 'Editar quantidade' : 'Quantidade')}
     <div style="font-weight:600;margin-bottom:10px">${esc(titulo)}</div>
     <div class="grid2">
-      <div class="field"><label>Quantidade</label><input name="qtd" inputmode="decimal" value="${fmt(qtdIni, 3)}" autofocus></div>
+      <div class="field"><label>Quantidade</label><input name="qtd" inputmode="decimal" value="${fmtIn(qtdIni, 3)}" autofocus></div>
       <div class="field"><label>Unidade</label><select name="uni">${unidades.map((u) => `<option value="${esc(u.nome)}" ${u.nome === uniIni ? 'selected' : ''}>${esc(u.nome)}${u.fator && u.fator !== 1 ? ` (${fmt(u.fator, 2)} ${esc(ref.refUnidade)})` : ''}</option>`).join('')}</select></div>
     </div>
     ${tipo === 'alimento' ? `<p class="help">Referência: ${fmt(ref.kcal)} kcal e ${fmt(ref.prot, 1)} g de proteína por ${fmt(ref.refQtd, 2)} ${esc(ref.refUnidade)}.${ref.medidas.length ? '' : ' Para usar unidade, colher ou scoop, cadastre a equivalência no alimento.'}</p>`
@@ -652,14 +722,15 @@ function folhaQuantidade({ tipo, id, item, idxRefeicao, aoConfirmar, aoContinuar
       const u = inU.value; const vals = ehBase(u) ? [50, 100, 150, 200, 250] : [0.5, 1, 1.5, 2, 3];
       const fator = ehBase(u) ? 1 : (unidades.find((x) => x.nome === u) || {}).fator;
       at.innerHTML = vals.map((v) => `<button type="button" class="chip" data-v="${v}">${fmt(v, 1)}${ehBase(u) ? ' ' + u : ''}${fator && fator !== 1 && tipo === 'alimento' ? ` <span class="muted">(${fmt(v * fator, 0)} ${esc(ref.refUnidade)})</span>` : ''}</button>`).join('');
-      $$('.chip', at).forEach((c) => c.addEventListener('click', () => { inQ.value = fmt(Number(c.dataset.v), 3); atualizar(); inQ.focus(); }));
+      $$('.chip', at).forEach((c) => c.addEventListener('click', () => { inQ.value = fmtIn(Number(c.dataset.v), 3); atualizar(); inQ.focus(); }));
     };
     const atualizar = () => {
       const q = num(inQ.value);
       $$('.chip', at).forEach((c) => c.classList.toggle('active', Number(c.dataset.v) === q));
       if (!(q > 0)) { pv.innerHTML = '<span style="grid-column:1/-1">Informe uma quantidade maior que zero.</span>'; ok.disabled = true; if (cont) cont.disabled = true; return; }
       const n = calc(q, inU.value); ok.disabled = false; if (cont) cont.disabled = false;
-      pv.innerHTML = `<div><b>${fmt(n.kcal)}</b><span>kcal</span></div><div><b>${fmt(n.prot, 1)}</b><span>g prot</span></div><div><b>${fmt(n.carb, 1)}</b><span>g carb</span></div><div><b>${fmt(n.gord, 1)}</b><span>g gord</span></div>`;
+      pv.innerHTML = `<div><b>${fmt(n.kcal)}</b><span>kcal</span></div><div><b>${fmt(n.prot, 1)}</b><span>g prot</span></div><div><b>${fmt(n.carb, 1)}</b><span>g carb</span></div><div><b>${fmt(n.gord, 1)}</b><span>g gord</span></div>`
+        + `<div class="small muted" style="grid-column:1/-1">Fibras ${n.fibra == null ? 'não informadas' : fmt(n.fibra, 1) + ' g'} · Sódio ${n.sodio == null ? 'não informado' : fmt(n.sodio) + ' mg'}</div>`;
     };
     inQ.addEventListener('input', atualizar); inU.addEventListener('change', () => { atalhos(); atualizar(); }); atalhos(); atualizar();
     inQ.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !ok.disabled) ok.click(); });
@@ -672,7 +743,7 @@ function folhaQuantidade({ tipo, id, item, idxRefeicao, aoConfirmar, aoContinuar
     };
     ok.addEventListener('click', () => confirmar_(aoConfirmar));
     if (cont) cont.addEventListener('click', () => confirmar_(aoContinuar));
-    setTimeout(() => { inQ.focus(); inQ.select(); }, 50);
+    inQ.focus(); inQ.select();
   });
 }
 
@@ -705,22 +776,23 @@ function calcularLinha(l, q) {
     const ref = l.tipo === 'alimento' ? D.alimentos.find((a) => a.id === l.refId) : D.receitas.find((r) => r.id === l.refId);
     if (ref) { try { return { ...(l.tipo === 'alimento' ? nutrientesAlimento(ref, q, l.unidade) : nutrientesReceita(ref, q, l.unidade)), rotulo: l.tipo === 'alimento' ? rotuloAlimento(ref) : ref.nome, fonte: 'cadastro' }; } catch { /* medida sumiu: cai no snapshot */ } }
   }
-  const f = q / l.qtd; return { kcal: l.kcal * f, prot: l.prot * f, carb: l.carb * f, gord: l.gord * f, rotulo: l.rotulo, fonte: l.historico ? 'historico' : 'snapshot' };
+  const f = q / l.qtd; return { ...escalar(l, f), rotulo: l.rotulo, fonte: l.historico ? 'historico' : 'snapshot' };
 }
 function folhaRevisar({ titulo, descricao, linhas, destino, aoConfirmar, botao = 'Adicionar' }) {
   const estado = linhas.map((l) => ({ l, q: l.qtd, sel: true }));
   const desenhar = (s) => {
-    let tot = { kcal: 0, prot: 0, carb: 0, gord: 0 }; let nSel = 0; let avisoSnapshot = false;
+    const selecionados = []; let nSel = 0; let avisoSnapshot = false;
     const html = estado.map((e, i) => {
       const c = calcularLinha(e.l, e.q > 0 ? e.q : e.l.qtd);
-      if (e.sel && e.q > 0) { nSel++; tot = somar([tot, c]); }
+      if (e.sel && e.q > 0) { nSel++; selecionados.push(c); }
       if (c.fonte === 'snapshot') avisoSnapshot = true;
       return `<div class="ing" style="gap:6px;opacity:${e.sel ? 1 : .5}">
         <input type="checkbox" data-sel="${i}" ${e.sel ? 'checked' : ''} aria-label="Incluir ${esc(c.rotulo)}" style="width:22px;height:22px;flex:none">
         <div class="grow"><div class="ellipsis" style="font-weight:500">${esc(c.rotulo)}${c.fonte === 'snapshot' ? ' <span class="badge neutral">cadastro excluído</span>' : ''}</div><div class="small muted">${fmt(c.kcal)} kcal · ${fmt(c.prot, 1)} g prot</div></div>
-        <input data-q="${i}" inputmode="decimal" value="${fmt(e.q, 3)}" aria-label="Quantidade" style="width:64px;min-height:40px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);text-align:right">
+        <input data-q="${i}" inputmode="decimal" value="${fmtIn(e.q, 3)}" aria-label="Quantidade" style="width:64px;min-height:40px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);text-align:right">
         <span class="small muted" style="width:58px">${esc(e.l.unidade)}</span></div>`;
     }).join('');
+    const tot = somar(selecionados);
     $('.linhas', s).innerHTML = html;
     $('.total', s).innerHTML = `<div class="preview" style="margin:10px 0 0"><div><b>${fmt(tot.kcal)}</b><span>kcal</span></div><div><b>${fmt(tot.prot, 1)}</b><span>g prot</span></div><div><b>${fmt(tot.carb, 1)}</b><span>g carb</span></div><div><b>${fmt(tot.gord, 1)}</b><span>g gord</span></div></div>
       ${avisoSnapshot ? '<p class="help">Itens com cadastro excluído usam os valores guardados na combinação.</p>' : ''}`;
@@ -736,7 +808,7 @@ function folhaRevisar({ titulo, descricao, linhas, destino, aoConfirmar, botao =
     let enviado = false;
     $('[data-ok]', s).addEventListener('click', () => {
       if (enviado) return; enviado = true;
-      const escolhidas = estado.filter((e) => e.sel && e.q > 0).map((e) => { const c = calcularLinha(e.l, e.q); return { tipo: e.l.tipo, refId: e.l.refId, rotulo: c.rotulo, qtd: e.q, unidade: e.l.unidade, kcal: c.kcal, prot: c.prot, carb: c.carb, gord: c.gord }; });
+      const escolhidas = estado.filter((e) => e.sel && e.q > 0).map((e) => { const c = calcularLinha(e.l, e.q); return { tipo: e.l.tipo, refId: e.l.refId, rotulo: c.rotulo, qtd: e.q, unidade: e.l.unidade, ...escalar(c, 1) }; });
       fecharFolha(); aoConfirmar(escolhidas);
     });
     desenhar(s);
@@ -754,7 +826,7 @@ function inserirLote(idxRefeicao, itens, origem) {
 }
 
 // ----- Combinações (conjuntos de consumos independentes; não são receitas) -----
-function linhasDeItens(itens, historico) { return itens.map((it) => ({ tipo: it.tipo, refId: it.refId, rotulo: it.rotulo, qtd: it.qtd, unidade: it.unidade, kcal: it.kcal, prot: it.prot, carb: it.carb, gord: it.gord, historico })); }
+function linhasDeItens(itens, historico) { return itens.map((it) => ({ tipo: it.tipo, refId: it.refId, rotulo: it.rotulo, qtd: it.qtd, unidade: it.unidade, ...escalar(it, 1), historico })); }
 function salvarCombinacao(itens, nomeSugerido) {
   if (!itens.length) { toast('A refeição está vazia.'); return; }
   const nome = prompt('Nome da combinação (ex.: Meu café da manhã):', nomeSugerido || ''); if (!nome || !nome.trim()) return;
@@ -795,27 +867,33 @@ function repetirUltima(idxRefeicao) {
 }
 
 // ----- Detalhe do dia: de onde vem cada nutriente -----
-const NUTRIENTES = { kcal: { nome: 'Calorias', un: 'kcal', dec: 0 }, prot: { nome: 'Proteínas', un: 'g', dec: 1 }, carb: { nome: 'Carboidratos', un: 'g', dec: 1 }, gord: { nome: 'Gorduras', un: 'g', dec: 1 } };
+const NUTRIENTES = Object.fromEntries(NUTR.map((n) => [n.k, n]));
 function folhaDetalheDia(n0 = 'kcal') {
   let n = NUTRIENTES[n0] ? n0 : 'kcal';
   const desenhar = (s) => {
-    const dia = obterDia(UI.data, false); const info = NUTRIENTES[n]; const m = D.config.metas[n];
+    const dia = obterDia(UI.data, false); const info = NUTRIENTES[n]; const m = metasEm(UI.data)[n];
     const itens = dia ? dia.refeicoes.flatMap((r, i) => r.itens.map((it) => ({ it, r, i }))) : [];
-    const total = itens.reduce((a, x) => a + x.it[n], 0);
-    const pct = (v) => total > 0 ? `${fmt(v / total * 100)}%` : '–';
-    const porRef = dia ? dia.refeicoes.map((r) => ({ r, v: r.itens.reduce((a, it) => a + it[n], 0) })) : [];
-    const maiores = [...itens].sort((a, b) => b.it[n] - a.it[n]).slice(0, 10);
-    const difTxt = m ? (m - total >= 0 ? `faltam ${fmt(m - total, info.dec)} ${info.un} para a meta de ${fmt(m, info.dec)}` : `${fmt(total - m, info.dec)} ${info.un} além da meta de ${fmt(m, info.dec)}`) : 'sem meta definida para este nutriente';
+    const val = (it) => it[n] == null ? null : it[n];
+    const conhecidos = itens.filter((x) => val(x.it) != null).length;
+    const total = itens.reduce((a, x) => a + (val(x.it) || 0), 0);
+    const pct = (v) => total > 0 && v != null ? `${fmt(v / total * 100)}%` : '–';
+    const porRef = dia ? dia.refeicoes.map((r) => ({ r, v: r.itens.reduce((a, it) => a + (val(it) || 0), 0), semDados: r.itens.length && r.itens.every((it) => val(it) == null) })) : [];
+    const maiores = [...itens].sort((a, b) => (val(b.it) || 0) - (val(a.it) || 0)).slice(0, 10);
+    const opcional = !info.obrigatorio; const parcial = opcional && conhecidos < itens.length;
+    const difTxt = !m ? (opcional ? `sem ${info.meta === 'limite' ? 'limite' : 'meta'} definido para este nutriente` : 'sem meta definida para este nutriente')
+      : info.meta === 'limite' ? (total <= m ? `${fmt(m - total, info.dec)} ${info.un} abaixo do limite de ${fmt(m, info.dec)}` : `${fmt(total - m, info.dec)} ${info.un} acima do limite de ${fmt(m, info.dec)}`)
+      : (m - total >= 0 ? `faltam ${fmt(m - total, info.dec)} ${info.un} para a meta de ${fmt(m, info.dec)}` : `${fmt(total - m, info.dec)} ${info.un} além da meta de ${fmt(m, info.dec)}`);
+    const cobTxt = opcional && itens.length ? (conhecidos === 0 ? 'Nenhum registro informa este nutriente.' : parcial ? `Total parcial: dados em ${conhecidos} de ${itens.length} registros. Um item sem dado pode ser grande; isto mede cobertura, não precisão.` : `Dados em todos os ${itens.length} registros.`) : '';
     $$('.chip', s).forEach((c) => c.classList.toggle('active', c.dataset.n === n));
     $('.corpo', s).innerHTML = `
       <div class="stat ${n === 'prot' ? 'prot' : ''}" style="margin-bottom:12px"><div class="label">${info.nome} registradas ${rotuloData(UI.data).toLowerCase()}${dia && dia.concluido ? '' : ' <span class="badge neutral">dia em aberto · parcial</span>'}</div>
-        <div class="value">${fmt(total, info.dec)} <small>${info.un}</small></div><div class="sub">${difTxt}</div>${m ? `<div class="bar"><span style="width:${Math.min(100, total / m * 100)}%"></span></div>` : ''}</div>
+        <div class="value">${opcional && conhecidos === 0 && itens.length ? 'não informado' : fmt(total, info.dec)} <small>${opcional && conhecidos === 0 && itens.length ? '' : info.un}</small>${parcial ? ' <span class="badge neutral">parcial</span>' : ''}</div><div class="sub">${difTxt}</div>${cobTxt ? `<div class="sub small muted">${cobTxt}</div>` : ''}${m && conhecidos ? `<div class="bar"><span style="width:${Math.min(100, total / m * 100)}%"></span></div>` : ''}</div>
       ${!itens.length ? '<div class="empty">Nenhum alimento registrado neste dia.</div>' : `
       <h3>Por refeição</h3>
-      ${porRef.map(({ r, v }) => `<div class="ing"><div class="grow">${esc(r.nome)}</div><div style="text-align:right"><b>${fmt(v, info.dec)} ${info.un}</b> <span class="muted small">· ${pct(v)}</span><div class="bar" style="width:120px;margin:4px 0 0 auto"><span style="width:${total > 0 ? v / total * 100 : 0}%"></span></div></div></div>`).join('')}
+      ${porRef.map(({ r, v, semDados }) => `<div class="ing"><div class="grow">${esc(r.nome)}</div><div style="text-align:right"><b>${semDados ? 'não informado' : `${fmt(v, info.dec)} ${info.un}`}</b> <span class="muted small">· ${semDados ? '–' : pct(v)}</span><div class="bar" style="width:120px;margin:4px 0 0 auto"><span style="width:${total > 0 ? v / total * 100 : 0}%"></span></div></div></div>`).join('')}
       <h3 style="margin-top:14px">Maiores contribuições</h3>
       <p class="help" style="margin-top:2px">Participação no total registrado do dia. Toque para corrigir o registro.</p>
-      ${maiores.map(({ it, r, i }) => `<button class="list-item" data-item="${it.id}" data-idx="${i}"><div class="grow"><div class="name">${esc(it.rotulo)}</div><div class="meta">${fmt(it.qtd, 2)} ${esc(it.unidade)} · ${esc(r.nome)}</div></div><div style="text-align:right"><b>${fmt(it[n], info.dec)} ${info.un}</b><div class="small muted">${pct(it[n])}</div></div></button>`).join('')}`}`;
+      ${maiores.map(({ it, r, i }) => `<button class="list-item" data-item="${it.id}" data-idx="${i}"><div class="grow"><div class="name">${esc(it.rotulo)}</div><div class="meta">${fmt(it.qtd, 2)} ${esc(it.unidade)} · ${esc(r.nome)}</div></div><div style="text-align:right"><b>${val(it) == null ? '<span class="muted">não informado</span>' : `${fmt(val(it), info.dec)} ${info.un}`}</b><div class="small muted">${pct(val(it))}</div></div></button>`).join('')}`}`;
     $$('[data-item]', s).forEach((b) => b.addEventListener('click', () => { fecharFolha(); folhaItem(Number(b.dataset.idx), b.dataset.item); }));
   };
   abrirFolha(`${cab('Detalhe do dia')}
@@ -846,7 +924,7 @@ function folhaItem(idxRefeicao, itemId) {
 // Item cujo alimento foi apagado: recalcula proporcionalmente a partir do próprio registro.
 function folhaQuantidadeOrfa(it) {
   abrirFolha(`${cab('Alterar quantidade')}<p class="help">O cadastro original foi excluído. A nova quantidade será calculada proporcionalmente a este registro (${fmt(it.qtd, 2)} ${esc(it.unidade)} = ${fmt(it.kcal)} kcal).</p>
-    <div class="field"><label>Quantidade (${esc(it.unidade)})</label><input name="qtd" inputmode="decimal" value="${fmt(it.qtd, 3)}"></div><button class="btn primary full" data-ok>Salvar</button>`, (s) => {
+    <div class="field"><label>Quantidade (${esc(it.unidade)})</label><input name="qtd" inputmode="decimal" value="${fmtIn(it.qtd, 3)}"></div><button class="btn primary full" data-ok>Salvar</button>`, (s) => {
     $('[data-ok]', s).addEventListener('click', () => {
       const q = num($('[name=qtd]', s).value); if (!(q > 0)) { toast('Quantidade inválida.'); return; }
       const f = q / it.qtd; it.kcal *= f; it.prot *= f; it.carb *= f; it.gord *= f; it.qtd = q; salvar(); render(); fecharFolha();
@@ -901,15 +979,18 @@ function folhaAlimento(id, inicial = {}, aoSalvar) {
       ${v.obs ? `<p class="help" style="margin-top:0;background:var(--warn-soft);padding:8px 10px;border-radius:8px">${esc(v.obs)}</p>` : ''}
       <p class="help" style="margin-top:0">Os valores abaixo valem para a <b>quantidade de referência</b> (ex.: 100 g, 100 ml ou 1 porção). Copie do rótulo.</p>
       <div class="grid2">
-        <div class="field"><label>Quantidade de referência</label><input name="refQtd" inputmode="decimal" value="${fmt(v.refQtd, 3)}" required></div>
+        <div class="field"><label>Quantidade de referência</label><input name="refQtd" inputmode="decimal" value="${fmtIn(v.refQtd, 3)}" required></div>
         <div class="field"><label>Unidade</label><select name="refUnidade">${['g', 'ml', 'porção'].map((u) => `<option ${v.refUnidade === u ? 'selected' : ''}>${u}</option>`).join('')}</select></div>
       </div>
       <div class="grid2">
-        <div class="field"><label>Calorias (kcal)</label><input name="kcal" inputmode="decimal" value="${v.kcal === '' ? '' : fmt(v.kcal, 2)}" required></div>
-        <div class="field"><label>Proteínas (g)</label><input name="prot" inputmode="decimal" value="${v.prot === '' ? '' : fmt(v.prot, 2)}" required></div>
-        <div class="field"><label>Carboidratos (g)</label><input name="carb" inputmode="decimal" value="${v.carb === '' ? '' : fmt(v.carb, 2)}" required></div>
-        <div class="field"><label>Gorduras (g)</label><input name="gord" inputmode="decimal" value="${v.gord === '' ? '' : fmt(v.gord, 2)}" required></div>
+        <div class="field"><label>Calorias (kcal)</label><input name="kcal" inputmode="decimal" value="${v.kcal === '' ? '' : fmtIn(v.kcal, 2)}" required></div>
+        <div class="field"><label>Proteínas (g)</label><input name="prot" inputmode="decimal" value="${v.prot === '' ? '' : fmtIn(v.prot, 2)}" required></div>
+        <div class="field"><label>Carboidratos (g)</label><input name="carb" inputmode="decimal" value="${v.carb === '' ? '' : fmtIn(v.carb, 2)}" required></div>
+        <div class="field"><label>Gorduras (g)</label><input name="gord" inputmode="decimal" value="${v.gord === '' ? '' : fmtIn(v.gord, 2)}" required></div>
+        <div class="field"><label>Fibras (g) — opcional</label><input name="fibra" inputmode="decimal" value="${v.fibra == null || v.fibra === '' ? '' : fmtIn(v.fibra, 2)}" placeholder="não informado"></div>
+        <div class="field"><label>Sódio (mg) — opcional</label><input name="sodio" inputmode="decimal" value="${v.sodio == null || v.sodio === '' ? '' : fmtIn(v.sodio, 2)}" placeholder="não informado"></div>
       </div>
+      <p class="help" style="margin-top:-4px">Em branco = não informado (diferente de 0). Sódio em mg; o rótulo às vezes traz só “sal”: não converta, deixe em branco.</p>
       <h3>Medidas caseiras (opcional)</h3>
       <p class="help">Ex.: “unidade” = 50 g, “scoop” = 30 g, “colher de sopa” = 15 ml. Sem equivalência cadastrada o app não presume conversão.</p>
       <div class="medidas">${medidas.map(linhaMedida).join('')}</div>
@@ -941,15 +1022,18 @@ function folhaAlimento(id, inicial = {}, aoSalvar) {
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       const campos = { nome: form.nome.value.trim(), marca: form.marca.value.trim(), estado: form.estado.value, refQtd: num(form.refQtd.value), refUnidade: form.refUnidade.value,
-        kcal: num(form.kcal.value), prot: num(form.prot.value), carb: num(form.carb.value), gord: num(form.gord.value), medidas, favorito: form.favorito.checked, obs: v.obs || '', codigoBarras: normalizarCodigo(form.codigoBarras.value) };
+        kcal: num(form.kcal.value), prot: num(form.prot.value), carb: num(form.carb.value), gord: num(form.gord.value),
+        fibra: form.fibra.value.trim() === '' ? null : num(form.fibra.value), sodio: form.sodio.value.trim() === '' ? null : num(form.sodio.value),
+        medidas, favorito: form.favorito.checked, obs: v.obs || '', codigoBarras: normalizarCodigo(form.codigoBarras.value) };
       if (!campos.nome) { toast('Informe o nome.'); return; }
       if (!(campos.refQtd > 0)) { toast('Quantidade de referência deve ser maior que zero.'); return; }
-      for (const k of ['kcal', 'prot', 'carb', 'gord']) if (!(campos[k] >= 0)) { toast(`Valor inválido em ${k}. Use números (vírgula ou ponto).`); return; }
+      for (const k of NUTR_OBRIG) if (!(campos[k] >= 0)) { toast(`Valor inválido em ${k}. Use números (vírgula ou ponto).`); return; }
+      for (const k of NUTR_OPC) if (campos[k] !== null && !(campos[k] >= 0)) { toast(`Valor inválido em ${k}. Use números ou deixe em branco.`); return; }
       if (campos.codigoBarras) { const dono = D.alimentos.find((x) => x !== a && x.codigoBarras === campos.codigoBarras); if (dono && !confirmar(`O código ${campos.codigoBarras} já está em “${dono.nome}”. Manter nos dois?`)) return; }
-      if (!a && v.fonte) { const mudou = ['kcal', 'prot', 'carb', 'gord'].some((k) => v[k] !== '' && v[k] !== campos[k]); campos.fonte = mudou ? v.fonte + ' (editado)' : v.fonte; }
+      if (!a && v.fonte) { const mudou = NUTR_OBRIG.some((k) => v[k] !== '' && v[k] !== campos[k]); campos.fonte = mudou ? v.fonte + ' (editado)' : v.fonte; }
       let salvo;
       if (a) {
-        const mudouValor = a.fonte && ['kcal', 'prot', 'carb', 'gord', 'refQtd', 'refUnidade'].some((k) => a[k] !== campos[k]);
+        const mudouValor = a.fonte && [...NUTR_OBRIG, 'refQtd', 'refUnidade'].some((k) => a[k] !== campos[k]);
         Object.assign(a, campos, { atualizadoEm: new Date().toISOString() });
         if (mudouValor) a.fonte = a.fonte.replace(/ \(editado\)$/, '') + ' (editado)';
         salvo = a;
@@ -969,7 +1053,7 @@ function folhaAlimento(id, inicial = {}, aoSalvar) {
         salvar(); fecharFolha(); render(); toast('Alimento excluído.');
       });
     }
-    setTimeout(() => form.nome.focus(), 50);
+    form.nome.focus();
   });
 }
 
@@ -978,7 +1062,7 @@ function folhaReceita(id, rascunho = null, ingsIniciais = null) {
   const r = id ? D.receitas.find((x) => x.id === id) : null;
   const v = Object.assign({ nome: '', porcoes: 1, pesoFinal: '', favorito: false, ingredientes: [] }, r || {}, rascunho || {});
   let ings = ingsIniciais ? ingsIniciais : v.ingredientes.map((i) => ({ ...i }));
-  const totais = () => somar(ings.map((i) => ({ kcal: i.kcal, prot: i.prot, carb: i.carb, gord: i.gord })));
+  const totais = () => somar(ings);
   abrirFolha(`${cab(r ? 'Editar receita' : 'Nova receita')}
     <form data-form="receita">
       <div class="field"><label>Nome</label><input name="nome" value="${esc(v.nome)}" required placeholder="Ex.: Pão com ovo"></div>
@@ -986,8 +1070,8 @@ function folhaReceita(id, rascunho = null, ingsIniciais = null) {
       <div class="ings"></div>
       <button type="button" class="btn sm full" data-add-ing style="margin:8px 0 12px">+ Adicionar ingrediente</button>
       <div class="grid2">
-        <div class="field"><label>Rendimento (porções)</label><input name="porcoes" inputmode="decimal" value="${fmt(v.porcoes, 2)}" required></div>
-        <div class="field"><label>Peso final do preparo (g, opcional)</label><input name="pesoFinal" inputmode="decimal" value="${v.pesoFinal ? fmt(v.pesoFinal, 1) : ''}"></div>
+        <div class="field"><label>Rendimento (porções)</label><input name="porcoes" inputmode="decimal" value="${fmtIn(v.porcoes, 2)}" required></div>
+        <div class="field"><label>Peso final do preparo (g, opcional)</label><input name="pesoFinal" inputmode="decimal" value="${v.pesoFinal ? fmtIn(v.pesoFinal, 1) : ''}"></div>
       </div>
       <div class="resumo"></div>
       <label class="check"><input type="checkbox" name="favorito" ${v.favorito ? 'checked' : ''}> Favorita</label>
@@ -1015,7 +1099,7 @@ function folhaReceita(id, rascunho = null, ingsIniciais = null) {
       const reabrir = () => folhaReceita(id, rascunho, ings);
       folhaEscolherIngrediente((alimento) => {
         folhaQuantidade({ tipo: 'alimento', id: alimento.id, aoConfirmar: (d) => {
-          ings.push({ alimentoId: alimento.id, rotulo: d.rotulo, qtd: d.qtd, unidade: d.unidade, kcal: d.kcal, prot: d.prot, carb: d.carb, gord: d.gord });
+          ings.push({ alimentoId: alimento.id, rotulo: d.rotulo, qtd: d.qtd, unidade: d.unidade, ...escalar(d, 1) });
           reabrir();
         } });
       }, reabrir);
@@ -1048,7 +1132,7 @@ function folhaEscolherIngrediente(aoEscolher, aoCancelar) {
   abrirFolha(`${cab('Escolher ingrediente')}<input class="search" type="search" placeholder="Buscar alimento" aria-label="Buscar"><div class="lista"></div>`, (s) => {
     $('.search', s).addEventListener('input', (e) => { busca = e.target.value; desenhar(s); }); desenhar(s);
     $('[data-fechar]', s).addEventListener('click', aoCancelar);
-    setTimeout(() => $('.search', s).focus(), 50);
+    $('.search', s).focus();
   });
 }
 
@@ -1108,11 +1192,15 @@ function mapearOFF(p, codigo) {
   const m = /([\d.,]+)\s*(g|ml)/i.exec(p.serving_size || '');
   if (m && m[2].toLowerCase() === refUnidade) { const q = num(m[1]); if (q > 0) medidas.push({ nome: 'porção do rótulo', equivale: q }); }
   const faltando = ['kcal', 'prot', 'carb', 'gord'].filter((k, i) => [kcal, num100('proteins_100g'), num100('carbohydrates_100g'), num100('fat_100g')][i] === '');
+  // Opcionais: fibra em g; sódio no OFF vem em g → mg, convertido uma única vez aqui. "Sal" não é sódio: não converte.
+  const fibra = num100('fiber_100g') === '' ? null : num100('fiber_100g');
+  const sodio = num100('sodium_100g') === '' ? null : Math.round(num100('sodium_100g') * 1000);
+  const avisoSal = sodio === null && num100('salt_100g') !== '' ? ` Vem só “sal” (${fmt(num100('salt_100g'), 2)} g/100 ${refUnidade}); sódio ficou como não informado.` : '';
   return {
     nome: (p.product_name_pt || p.product_name || '').trim(), marca: (p.brands || '').split(',')[0].trim(), refQtd: 100, refUnidade,
-    kcal, prot: num100('proteins_100g'), carb: num100('carbohydrates_100g'), gord: num100('fat_100g'), medidas,
+    kcal, prot: num100('proteins_100g'), carb: num100('carbohydrates_100g'), gord: num100('fat_100g'), fibra, sodio, medidas,
     codigoBarras: codigo, fonte: FONTE_OFF,
-    obs: `Dados do ${FONTE_OFF} (base colaborativa): confira com o rótulo antes de salvar.${faltando.length ? ` Faltou no cadastro deles: ${faltando.join(', ')}.` : ''}${p.serving_size ? ` Porção informada: ${p.serving_size}.` : ''}${avisoBase}`,
+    obs: `Dados do ${FONTE_OFF} (base colaborativa): confira com o rótulo antes de salvar.${faltando.length ? ` Faltou no cadastro deles: ${faltando.join(', ')}.` : ''}${p.serving_size ? ` Porção informada: ${p.serving_size}.` : ''}${avisoBase}${avisoSal}`,
   };
 }
 // Fluxo: código → alimento já cadastrado (callback direto) → consulta OFF → formulário preenchido → callback ao salvar.
@@ -1143,7 +1231,7 @@ function folhaCodigo(aoEscolher) {
     <p class="small muted">${D.config.consultarOFF ? `A consulta envia apenas o código ao ${FONTE_OFF}. Pode ser desligada em Ajustes.` : 'Consulta ao Open Food Facts desligada em Ajustes: o código só fica salvo no alimento.'}</p>`, async (s) => {
     $('form', s).addEventListener('submit', (e) => { e.preventDefault(); tratar(s, $('[name=codigo]', s).value); });
     const bd = $('.sheet-backdrop'); const obs = new MutationObserver(() => { if (!document.contains(bd)) { parar(); obs.disconnect(); } }); obs.observe($('#sheet-root'), { childList: true });
-    if (!temLeitor()) { setTimeout(() => $('[name=codigo]', s).focus(), 50); return; }
+    if (!temLeitor()) { $('[name=codigo]', s).focus(); return; }
     const video = $('video', s), msg = $('.cam-msg', s);
     try {
       const formatos = (await BarcodeDetector.getSupportedFormats()).filter((f) => ['ean_13', 'ean_8', 'upc_a', 'upc_e'].includes(f));
@@ -1176,7 +1264,7 @@ function folhaCodigo(aoEscolher) {
       laco();
     } catch (e) {
       console.warn(e); parar(); $('.camera', s).innerHTML = `<p class="help">Não foi possível usar a câmera (${e.name === 'NotAllowedError' ? 'permissão negada' : 'indisponível'}). Digite o código abaixo.</p>`;
-      setTimeout(() => $('[name=codigo]', s).focus(), 50);
+      $('[name=codigo]', s).focus();
     }
   });
 }
@@ -1194,7 +1282,7 @@ function folhaAgua() {
     $('[data-ok]', s).addEventListener('click', add); inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') add(); });
     $$('.chip', s).forEach((c) => c.addEventListener('click', () => { inp.value = c.dataset.v; add(); }));
     $$('[data-rm]', s).forEach((b) => b.addEventListener('click', () => { dia.agua = dia.agua.filter((a) => a.id !== b.dataset.rm); salvar(); fecharFolha(); render(); }));
-    setTimeout(() => inp.focus(), 50);
+    inp.focus();
   });
 }
 
@@ -1206,16 +1294,17 @@ function baixar(nome, conteudo, tipo) {
 }
 function exportarJSON() { baixar(`meu-prato-backup-${hojeISO()}${modoDemo() ? '-demo' : ''}.json`, JSON.stringify({ ...D, exportadoEm: new Date().toISOString(), app: 'Meu Prato' }, null, 2), 'application/json'); toast('Backup gerado.'); }
 function exportarCSV() {
-  const linhas = [['data', 'refeicao', 'alimento', 'tipo', 'quantidade', 'unidade', 'kcal', 'proteina_g', 'carboidrato_g', 'gordura_g', 'dia_concluido']];
+  const linhas = [['data', 'refeicao', 'alimento', 'tipo', 'quantidade', 'unidade', 'kcal', 'proteina_g', 'carboidrato_g', 'gordura_g', 'fibra_g', 'sodio_mg', 'dia_concluido']];
+  const opc = (v, d) => v == null ? '' : v.toFixed(d); // vazio = não informado
   const datas = Object.keys(D.dias).sort();
   for (const data of datas) {
     for (const r of D.dias[data].refeicoes) for (const it of r.itens)
-      linhas.push([data, r.nome, it.rotulo, it.tipo, it.qtd, it.unidade, it.kcal.toFixed(1), it.prot.toFixed(2), it.carb.toFixed(2), it.gord.toFixed(2), D.dias[data].concluido ? 'sim' : 'nao']);
-    const ml = aguaDia(D.dias[data]); if (ml) linhas.push([data, 'Água', 'Água', 'agua', ml, 'ml', '0.0', '0.00', '0.00', '0.00', D.dias[data].concluido ? 'sim' : 'nao']);
+      linhas.push([data, r.nome, it.rotulo, it.tipo, it.qtd, it.unidade, it.kcal.toFixed(1), it.prot.toFixed(2), it.carb.toFixed(2), it.gord.toFixed(2), opc(it.fibra, 2), opc(it.sodio, 0), D.dias[data].concluido ? 'sim' : 'nao']);
+    const ml = aguaDia(D.dias[data]); if (ml) linhas.push([data, 'Água', 'Água', 'agua', ml, 'ml', '0.0', '0.00', '0.00', '0.00', '', '', D.dias[data].concluido ? 'sim' : 'nao']);
   }
   const cel = (v) => { const s = String(v).replace(/\./g, ',' ); return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
   // Números com vírgula decimal e separador ";" para abrir direto no Excel/LibreOffice em pt-BR.
-  const csv = '﻿' + linhas.map((l) => l.map((v, i) => (typeof v === 'number' || (i >= 6 && i <= 9)) ? String(v).replace('.', ',') : cel(v)).join(';')).join('\r\n');
+  const csv = '﻿' + linhas.map((l) => l.map((v, i) => (typeof v === 'number' || (i >= 6 && i <= 11)) ? String(v).replace('.', ',') : cel(v)).join(';')).join('\r\n');
   baixar(`meu-prato-historico-${hojeISO()}.csv`, csv, 'text/csv;charset=utf-8'); toast(linhas.length - 1 ? 'CSV gerado.' : 'CSV gerado (sem registros).');
 }
 function importarJSON(arquivo) {
@@ -1264,6 +1353,7 @@ function semearDemo(d) {
   const frango = mk('Peito de frango grelhado (exemplo)', '', 100, 'g', 159, 32, 0, 2.5, [], 'cozido', true);
   const whey = mk('Whey protein (exemplo)', 'Marca X', 30, 'g', 120, 24, 3, 2, [{ nome: 'scoop', equivale: 30 }], 'na', true);
   const iog = mk('Iogurte natural (exemplo)', '', 100, 'g', 60, 4, 5, 3);
+  d.config.metas = { ...METAS_VAZIAS(), kcal: 2000, prot: 120 }; d.config.historicoMetas = [{ desde: '1970-01-01', metas: { ...d.config.metas }, origem: 'demonstração' }];
   d.alimentos.push(ovo, pao, arroz, feijao, frango, whey, iog);
   d.alimentos.sort((x, y) => x.nome.localeCompare(y.nome, 'pt-BR'));
   const ing = (a, qtd, unidade) => ({ alimentoId: a.id, rotulo: a.nome, qtd, unidade, ...nutrientesAlimentoDe(a, qtd, unidade) });
@@ -1279,7 +1369,7 @@ function semearDemo(d) {
     d.dias[iso] = dia;
   }
 }
-function nutrientesAlimentoDe(a, qtd, unidade) { const u = [{ nome: a.refUnidade, fator: 1 }, ...a.medidas.map((m) => ({ nome: m.nome, fator: m.equivale }))].find((x) => x.nome === unidade); const f = (qtd * u.fator) / a.refQtd; return { kcal: a.kcal * f, prot: a.prot * f, carb: a.carb * f, gord: a.gord * f }; }
+function nutrientesAlimentoDe(a, qtd, unidade) { const u = [{ nome: a.refUnidade, fator: 1 }, ...a.medidas.map((m) => ({ nome: m.nome, fator: m.equivale }))].find((x) => x.nome === unidade); return escalar(a, (qtd * u.fator) / a.refQtd); }
 function alternarDemo() {
   const entrando = !modoDemo();
   try { if (entrando) localStorage.setItem(CHAVE_MODO, 'demo'); else localStorage.removeItem(CHAVE_MODO); } catch { toast('Sem acesso ao armazenamento.'); return; }
@@ -1296,6 +1386,7 @@ document.addEventListener('click', (e) => {
     'dia-ant': () => { UI.data = somarDias(UI.data, -1); render(); },
     'dia-prox': () => { UI.data = somarDias(UI.data, 1); render(); },
     'ir-hoje': () => { UI.data = hojeISO(); render(); },
+    'ir-config': () => { UI.aba = 'config'; render(); },
     'agua-mais': () => { const ml = num(el.dataset.ml); const dia = obterDia(UI.data); dia.agua.push({ id: uid(), ml, em: new Date().toISOString() }); salvar(); render(); },
     'agua-outro': () => folhaAgua(),
     'agua-desfazer': () => { const dia = obterDia(UI.data); const u = dia.agua.pop(); if (u) { salvar(); render(); toast(`Removidos ${fmt(u.ml)} ml.`); } },
@@ -1341,11 +1432,12 @@ document.addEventListener('submit', (e) => {
   const f = e.target.closest('form[data-form]'); if (!f || f.closest('#sheet-root')) return;
   e.preventDefault();
   if (f.dataset.form === 'metas') {
-    const kcal = num(f.kcal.value), prot = num(f.prot.value);
-    const carb = f.carb.value.trim() === '' ? null : num(f.carb.value), gord = f.gord.value.trim() === '' ? null : num(f.gord.value);
-    if (!(kcal > 0) || !(prot > 0)) { toast('Calorias e proteínas devem ser números maiores que zero.'); return; }
-    if ((carb !== null && !(carb >= 0)) || (gord !== null && !(gord >= 0))) { toast('Valor inválido em carboidratos ou gorduras.'); return; }
-    D.config.metas = { kcal, prot, carb, gord }; if (salvar()) toast('Metas salvas.');
+    const novas = METAS_VAZIAS();
+    for (const n of NUTR) { const v = f[n.k].value.trim(); if (v === '') continue; const x = num(v); if (!(x > 0)) { toast(`${n.nome}: use um número maior que zero ou deixe em branco.`); return; } novas[n.k] = x; }
+    const hoje = hojeISO(); D.config.metas = novas;
+    D.config.historicoMetas = (D.config.historicoMetas || []).filter((h) => h.desde !== hoje);
+    D.config.historicoMetas.push({ desde: hoje, metas: { ...novas } }); D.config.historicoMetas.sort((a, b) => a.desde.localeCompare(b.desde));
+    if (salvar()) { toast(temAlgumaMeta(novas) ? 'Metas salvas, valendo a partir de hoje.' : 'Metas removidas a partir de hoje.'); render(); }
   }
   if (f.dataset.form === 'agua') {
     const meta = num(f.meta.value), copo = num(f.copo.value);

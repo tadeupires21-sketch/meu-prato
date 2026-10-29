@@ -11,7 +11,9 @@ dependência, sem servidor de dados. Interface em pt-BR, feita para celular (And
    `python -m http.server 8765` dentro de `app-alimentar/` e abra `http://localhost:8765/`.
    Para o celular, publique a pasta em qualquer hospedagem estática (GitHub Pages, Netlify, etc.).
 2. No Chrome do Android: menu ⋮ → **Instalar aplicativo** (ou "Adicionar à tela inicial").
-3. **Ajustes** → defina metas de calorias e proteínas (carboidratos e gorduras são opcionais).
+3. **Ajustes** → metas diárias, todas opcionais (calorias, proteínas, carboidratos, gorduras, fibras e sódio como
+   limite). São referências suas; o app não calcula dieta. Sem meta, a tela mostra só o consumo. Cada salvamento
+   vale a partir do dia; dias anteriores continuam comparados com a meta que valia neles (vigência).
 4. **Alimentos** → `+ Alimento`: nome, marca, estado (cru/cozido), quantidade de referência (100 g, 100 ml
    ou 1 porção) e os valores do rótulo. Cadastre medidas caseiras (unidade = 50 g, scoop = 30 g…) se
    quiser registrar por elas — sem equivalência cadastrada o app não converte.
@@ -36,9 +38,12 @@ dependência, sem servidor de dados. Interface em pt-BR, feita para celular (And
 8. **Código de barras**: botão ▥ na busca de alimentos ou na aba Alimentos. Lê com a câmera ou aceita o código
    digitado; produto já cadastrado é reconhecido na hora, produto novo é consultado no Open Food Facts e
    aberto para conferência.
-9. **Água**: cartão na tela Hoje com copo que enche até a meta. Botões de copo, 500 ml, quantidade livre e
+9. **Histórico**: médias de calorias, macros, fibras, sódio e água só de dias concluídos, cada uma com o próprio
+   número de dias, comparadas com o período anterior; dias sem registro não entram como zero; dias só com água
+   aparecem como tal. A barra de cada dia marca a meta vigente naquele dia.
+10. **Água**: cartão na tela Hoje com copo que enche até a meta. Botões de copo, 500 ml, quantidade livre e
    desfazer; meta e tamanho do copo em Ajustes. Entra no backup, no histórico e no CSV.
-10. Marque **Dia concluído** para o dia entrar nas médias do Histórico (7 ou 30 dias).
+11. Marque **Dia concluído** para o dia entrar nas médias do Histórico (7 ou 30 dias).
 
 ## Como os dados são guardados
 
@@ -68,6 +73,11 @@ dependência, sem servidor de dados. Interface em pt-BR, feita para celular (And
   Ajustes, com botão para baixá-lo; nada é sobrescrito. Falha ao gravar mostra um banner persistente.
 
 ## Testes
+
+`testes/entrega3.js` cobre metas opcionais e vigência, fibras/sódio com não informado × zero, propagação em
+receita, CSV com colunas opcionais, tabela do histórico com denominadores, sódio do OFF em g→mg e sal não
+convertido, validação.
+
 
 `testes/entrega2.js` cobre a entrega 2: seleção em lote com rascunho preservado ao cadastrar alimento novo,
 prévia com desmarcar e ajustar, desfazer o lote, sem duplicar por toque repetido, combinação salva/aplicada com
