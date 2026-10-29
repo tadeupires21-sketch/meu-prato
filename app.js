@@ -31,6 +31,23 @@ const ALIMENTOS_BASE = [
   { nome: 'Aveia em flocos, crua', estado: 'cru', kcal: 394, prot: 13.9, carb: 66.6, gord: 8.5, medidas: [{ nome: 'colher de sopa', equivale: 15 }], obs: 'Colher de sopa de 15 g é média; varia com flocos finos/grossos e colher cheia/rasa.' },
   { nome: 'Batata-doce, cozida', estado: 'cozido', kcal: 77, prot: 0.6, carb: 18.4, gord: 0.1, obs: 'Sem medida por unidade: o tamanho varia demais. Pese e cadastre a sua.' },
   { nome: 'Maçã Fuji com casca, crua', estado: 'cru', kcal: 56, prot: 0.3, carb: 15.2, gord: 0, obs: 'Sem medida por unidade: tabelas divergem (de 100 a 160 g). Pese uma e cadastre "unidade".' },
+  { nome: 'Feijão preto, cozido', estado: 'cozido', kcal: 77, prot: 4.5, carb: 14.0, gord: 0.5 },
+  { nome: 'Abacate, cru', estado: 'cru', kcal: 96, prot: 1.2, carb: 6.0, gord: 8.4, obs: 'Sem medida por unidade: o tamanho varia muito. Pese a polpa.' },
+  { nome: 'Iogurte natural integral', estado: 'na', kcal: 51, prot: 4.1, carb: 1.9, gord: 3.0, obs: 'Valor médio da TACO; o rótulo da sua marca é mais preciso (marcas variam bastante).' },
+  { nome: 'Iogurte natural desnatado', estado: 'na', kcal: 41, prot: 3.8, carb: 5.8, gord: 0.3, obs: 'Valor médio da TACO; o rótulo da sua marca é mais preciso.' },
+  { nome: 'Leite de vaca integral', estado: 'na', refUnidade: 'ml', kcal: 60, prot: 3.2, carb: 4.5, gord: 3.3, obs: 'TACO informa por 100 g; aqui tratado como 100 ml (densidade do leite ≈ 1,03). Rótulo da marca é mais preciso.' },
+  { nome: 'Queijo minas frescal', estado: 'na', kcal: 264, prot: 17.4, carb: 3.2, gord: 20.2 },
+  { nome: 'Queijo muçarela', estado: 'na', kcal: 330, prot: 22.6, carb: 3.0, gord: 25.2, obs: 'Fatia varia de 15 a 30 g conforme o corte: pese ou use o rótulo.' },
+  { nome: 'Pão francês', estado: 'na', kcal: 300, prot: 8.0, carb: 58.6, gord: 3.1, medidas: [{ nome: 'unidade', equivale: 50 }], obs: 'Unidade de 50 g é o padrão de padaria, mas varia; pese o seu.' },
+  { nome: 'Batata inglesa, cozida', estado: 'cozido', kcal: 52, prot: 1.2, carb: 11.9, gord: 0 },
+  { nome: 'Ovo de galinha inteiro, frito', estado: 'cozido', kcal: 240, prot: 15.6, carb: 1.2, gord: 18.6, obs: 'Valor já inclui a gordura absorvida na fritura (média TACO). Sem unidade: o peso frito varia com o óleo.' },
+  { nome: 'Carne bovina, patinho sem gordura, grelhado', estado: 'cozido', kcal: 219, prot: 35.9, carb: 0, gord: 7.3 },
+  { nome: 'Mamão papaia, cru', estado: 'cru', kcal: 40, prot: 0.5, carb: 10.4, gord: 0.1 },
+  { nome: 'Laranja pêra, crua', estado: 'cru', kcal: 37, prot: 1.0, carb: 8.9, gord: 0.1, obs: 'Sem medida por unidade: pese a laranja descascada.' },
+  { nome: 'Tomate com semente, cru', estado: 'cru', kcal: 15, prot: 1.1, carb: 3.1, gord: 0.2 },
+  { nome: 'Azeite de oliva extra virgem', estado: 'na', kcal: 884, prot: 0, carb: 0, gord: 100, obs: 'Sem medida de colher: tabelas vão de 8 a 13 g. Pese uma colher sua e cadastre.' },
+  { nome: 'Banana nanica, crua', estado: 'cru', kcal: 92, prot: 1.4, carb: 23.8, gord: 0.1, obs: 'Sem medida por unidade: a nanica varia de 80 a 120 g. Pese uma e cadastre "unidade".' },
+  { nome: 'Cuscuz de milho, cozido com sal', estado: 'cozido', kcal: 113, prot: 2.2, carb: 25.3, gord: 0.7 },
 ];
 // Modelos: abrem o formulário já preenchido com o que não varia; valores vêm do rótulo do produto.
 const MODELOS_BASE = [
@@ -306,7 +323,7 @@ function telaConfig() {
   </section>
   <section class="card">
     <h2>Alimentos comuns</h2>
-    <p class="help">Adiciona ovo cozido, arroz, feijão, frango grelhado, pão integral, banana, aveia, batata-doce e maçã com valores por 100 g copiados da ${FONTE_TACO}. Entram como cadastro normal: confira e corrija se o seu produto for diferente. Itens já cadastrados não se repetem.</p>
+    <p class="help">Adiciona ${ALIMENTOS_BASE.length} alimentos do dia a dia (ovo, arroz, feijão, frango, carne, pães, laticínios, frutas, legumes, azeite) com valores por 100 g copiados da ${FONTE_TACO}. Entram como cadastro normal: confira e corrija se o seu produto for diferente. Itens já cadastrados não se repetem.</p>
     <button class="btn full" data-act="importar-base">Adicionar alimentos comuns (TACO)</button>
     <p class="help" style="margin-top:12px">Suplementos variam por marca, então não têm valor embutido. O modelo abaixo abre o cadastro já com porção e scoop para você copiar o rótulo.</p>
     ${MODELOS_BASE.map((m, i) => `<button class="btn full" data-act="modelo" data-i="${i}">Cadastrar ${esc(m.nome)} (do rótulo)</button>`).join('')}
@@ -824,12 +841,12 @@ function importarAlimentosBase() {
   // Itens já importados antes sem medida ganham a medida sugerida (só se não têm nenhuma).
   const completar = ALIMENTOS_BASE.filter((b) => porNome.has(b.nome.toLowerCase()) && b.medidas && !porNome.get(b.nome.toLowerCase()).medidas.length);
   if (!novos.length && !completar.length) { toast('Esses alimentos já estão cadastrados.'); return; }
-  const desc = (b) => `• ${b.nome}${b.medidas ? ` — ${b.medidas.map((m) => `1 ${m.nome} ≈ ${m.equivale} g`).join(', ')}` : ''}`;
+  const desc = (b) => `• ${b.nome}${b.medidas ? ` — ${b.medidas.map((m) => `1 ${m.nome} ≈ ${m.equivale} ${b.refUnidade || 'g'}`).join(', ')}` : ''}`;
   const msg = [novos.length ? `Adicionar ${novos.length} alimento(s) da ${FONTE_TACO}, por 100 g:\n${novos.map(desc).join('\n')}` : '',
     completar.length ? `Acrescentar medida caseira em:\n${completar.map(desc).join('\n')}` : '',
     'Pesos por unidade são médias aproximadas: confira pesando. Você pode corrigir qualquer valor depois.'].filter(Boolean).join('\n\n');
   if (!confirmar(msg)) return;
-  for (const b of novos) D.alimentos.push({ id: uid(), nome: b.nome, marca: '', estado: b.estado, refQtd: 100, refUnidade: 'g', kcal: b.kcal, prot: b.prot, carb: b.carb, gord: b.gord, medidas: (b.medidas || []).map((m) => ({ ...m })), favorito: false, fonte: FONTE_TACO, obs: b.obs || '', criadoEm: new Date().toISOString() });
+  for (const b of novos) D.alimentos.push({ id: uid(), nome: b.nome, marca: '', estado: b.estado, refQtd: 100, refUnidade: b.refUnidade || 'g', kcal: b.kcal, prot: b.prot, carb: b.carb, gord: b.gord, medidas: (b.medidas || []).map((m) => ({ ...m })), favorito: false, fonte: FONTE_TACO, obs: b.obs || '', criadoEm: new Date().toISOString() });
   for (const b of completar) { const a = porNome.get(b.nome.toLowerCase()); a.medidas = b.medidas.map((m) => ({ ...m })); if (!a.obs) a.obs = b.obs || ''; }
   D.alimentos.sort((x, y) => x.nome.localeCompare(y.nome, 'pt-BR'));
   salvar(); UI.aba = 'alimentos'; UI.filtroAlimentos = 'todos'; render(); toast(`${novos.length} adicionado(s), ${completar.length} completado(s).`);
