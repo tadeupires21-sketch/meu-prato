@@ -15,8 +15,13 @@ dependência, sem servidor de dados. Interface em pt-BR, feita para celular (And
 4. **Alimentos** → `+ Alimento`: nome, marca, estado (cru/cozido), quantidade de referência (100 g, 100 ml
    ou 1 porção) e os valores do rótulo. Cadastre medidas caseiras (unidade = 50 g, scoop = 30 g…) se
    quiser registrar por elas — sem equivalência cadastrada o app não converte.
-5. **Hoje** → `+ Adicionar alimento` na refeição: busca em recentes/favoritos/todos/receitas, informa a
-   quantidade (aceita vírgula decimal) e vê a prévia dos nutrientes antes de confirmar.
+5. **Hoje** → `+ Adicionar alimento` na refeição: busca em recentes/favoritos/todos/receitas (sem acento, palavras
+   em qualquer ordem), informa a quantidade (aceita vírgula decimal) e vê a prévia antes de confirmar. O app
+   sugere a última porção usada daquele alimento e oferece atalhos (50/100/150 g ou ½/1/2 medidas).
+   “Adicionar e continuar” mantém o seletor aberto, com o parcial da refeição no topo; cada inclusão tem
+   “Desfazer” no aviso.
+   Toque em calorias, proteínas, carboidratos ou gorduras no resumo para ver **de onde veio** cada nutriente:
+   total por refeição com participação e os alimentos que mais contribuíram, com acesso ao registro.
 6. Toque num item registrado para alterar quantidade, duplicar, mover, favoritar ou excluir.
    O `⋯` da refeição copia uma refeição de outro dia, renomeia ou remove.
 7. **Receitas**: ingredientes + rendimento em porções (+ peso final opcional). Registra-se por porção ou,
@@ -50,9 +55,17 @@ dependência, sem servidor de dados. Interface em pt-BR, feita para celular (And
   digitação do código. A consulta vai ao Open Food Facts (base colaborativa, cobertura parcial no Brasil) e
   envia apenas o código; o resultado abre no formulário para conferência e pode ser desligada em Ajustes.
 - Sem conta, sincronização, exercícios ou foto.
-- O cache offline (`sw.js`) guarda a versão instalada; ao mudar arquivos, suba `VERSAO` em `sw.js`.
+- O cache offline (`sw.js`) guarda a versão instalada; ao mudar arquivos, suba `VERSAO` em `sw.js`. Entre as
+  versões 2 e 8 o arquivo estava vazio por um erro de edição e o app não abria offline; corrigido na 9.
+- Se os dados salvos estiverem ilegíveis ao abrir, o app preserva o conteúdo original à parte e avisa em
+  Ajustes, com botão para baixá-lo; nada é sobrescrito. Falha ao gravar mostra um banner persistente.
 
 ## Testes
+
+`testes/recorte1.js` cobre o primeiro recorte da revisão de 29/10: cache do service worker, busca sem acentos,
+adicionar e continuar, desfazer, última porção (inclusive medida removida), detalhe de macros, escape de HTML no
+copiar, validação completa de backup, dados corrompidos preservados e falha de gravação sinalizada.
+
 
 `testes/e2e.js` (Playwright; servidor em `127.0.0.1:8765`, rode `node testes/e2e.js <pasta-capturas>`) cobre: cadastro, cálculo proporcional (200 kcal/10 g por 100 g →
 150 g = 300 kcal/15 g), edição/duplicação/exclusão, receita por porção e por grama, cópia de refeição,

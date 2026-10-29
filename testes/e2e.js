@@ -45,14 +45,14 @@ const URL = 'http://127.0.0.1:8765/index.html';
   await p.click('.sheet [data-ok]');
   await p.waitForSelector('.entry');
   console.log('almoço:', await txt('.meal[data-idx="1"] .meal-sub'));
-  assert.equal(await txt('.meal[data-idx="1"] .meal-sub'), '300 kcal · 15 g prot');
+  assert((await txt('.meal[data-idx="1"] .meal-sub')).startsWith('300 kcal · P 15'));
   assert((await txt('.stat .value')).startsWith('300'));
   // decimal com vírgula: 1,5 unidade = 75 g = 150 kcal
   await p.click('[data-act=adicionar][data-idx="0"]'); await p.click('.sheet [data-act=pick-alimento]');
   await p.fill('.sheet [name=qtd]', '1,5'); await p.selectOption('.sheet [name=uni]', 'unidade');
   assert.equal((await txt('.sheet .preview')).split(' ')[0], '150'); await p.click('.sheet [data-ok]');
   await p.waitForFunction(() => document.querySelectorAll('.entry').length === 2);
-  assert.equal(await txt('.meal[data-idx="0"] .meal-sub'), '150 kcal · 7,5 g prot');
+  assert((await txt('.meal[data-idx="0"] .meal-sub')).startsWith('150 kcal · P 7,5'));
   await p.screenshot({ path: SHOT + '/01-hoje.png', fullPage: true });
 
   // 3. Editar quantidade (150 -> 100) e depois duplicar e excluir
@@ -61,7 +61,7 @@ const URL = 'http://127.0.0.1:8765/index.html';
   await p.waitForFunction(() => document.querySelector('.meal[data-idx="1"] .meal-sub').textContent.startsWith('200'));
   await p.click('.meal[data-idx="1"] .entry'); await p.click('.sheet .menu button:has-text("Duplicar")');
   await p.waitForFunction(() => document.querySelectorAll('.meal[data-idx="1"] .entry').length === 2);
-  assert.equal(await txt('.meal[data-idx="1"] .meal-sub'), '400 kcal · 20 g prot');
+  assert((await txt('.meal[data-idx="1"] .meal-sub')).startsWith('400 kcal · P 20'));
   await p.click('.meal[data-idx="1"] .entry >> nth=1'); await p.click('.sheet .menu button:has-text("Excluir")');
   await p.waitForFunction(() => document.querySelectorAll('.meal[data-idx="1"] .entry').length === 1);
   console.log('editar/duplicar/excluir ok');
@@ -69,7 +69,7 @@ const URL = 'http://127.0.0.1:8765/index.html';
   // 4. Alterar o alimento depois NÃO muda o registro antigo
   await p.click('.tab[data-tab=alimentos]'); await p.click('[data-act=abrir-alimento]'); await p.click('.sheet .menu button:has-text("Editar")');
   await p.fill('.sheet [name=kcal]', '999'); await p.click('form[data-form=alimento] button[type=submit]');
-  await p.click('.tab[data-tab=hoje]'); assert.equal(await txt('.meal[data-idx="1"] .meal-sub'), '200 kcal · 10 g prot');
+  await p.click('.tab[data-tab=hoje]'); assert((await txt('.meal[data-idx="1"] .meal-sub')).startsWith('200 kcal · P 10'));
   console.log('snapshot preservado após editar alimento ok');
 
   // 5. Receita: 2 unidades (100 g = 999 kcal agora) + rendimento 2 porções, peso final 200 g
@@ -88,7 +88,7 @@ const URL = 'http://127.0.0.1:8765/index.html';
   // registrar receita no jantar
   await p.click('.tab[data-tab=hoje]'); await p.click('[data-act=adicionar][data-idx="3"]'); await p.click('.sheet .chip[data-f=receitas]'); await p.click('.sheet [data-act=pick-receita]');
   await p.click('.sheet [data-ok]'); await p.waitForFunction(() => document.querySelectorAll('.entry').length === 3);
-  assert.equal(await txt('.meal[data-idx="3"] .meal-sub'), '500 kcal · 5 g prot');
+  assert((await txt('.meal[data-idx="3"] .meal-sub')).startsWith('500 kcal · P 5'));
 
   // 6. Mudar de data: ontem deve estar vazio; copiar almoço de hoje para ontem; voltar e conferir que hoje não mudou
   await p.click('[data-act=dia-ant]'); assert.equal(await txt('h1'), 'Ontem');
@@ -106,7 +106,7 @@ const URL = 'http://127.0.0.1:8765/index.html';
 
   // 7. Persistência: recarregar
   await p.reload(); await p.waitForSelector('.entry');
-  assert.equal(await p.locator('.entry').count(), 3); assert.equal(await txt('.meal[data-idx="1"] .meal-sub'), '200 kcal · 10 g prot');
+  assert.equal(await p.locator('.entry').count(), 3); assert((await txt('.meal[data-idx="1"] .meal-sub')).startsWith('200 kcal · P 10'));
   assert(await p.isChecked('[data-act=concluir]'));
   console.log('persistência após recarregar ok');
 

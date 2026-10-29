@@ -123,3 +123,11 @@ hr.sep { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
 @keyframes onda { from { transform: translateX(0); } to { transform: translateX(-80px); } }
 .copo .onda { transition: transform .6s ease-out; }
 @media (prefers-reduced-motion: reduce) { .copo .onda path { animation: none; } }
+
+.demo-banner.erro { background: #fde3df; color: #7a1f17; font-weight: 600; }
+@media (prefers-color-scheme: dark) { .demo-banner.erro { background: #4a1f1a; color: #ffd9d4; } }
+.toast-acao { margin-left: 12px; background: none; border: 0; color: #8fd3b0; font-weight: 700; text-decoration: underline; padding: 4px 2px; min-height: 32px; }
+.stat { border: 0; text-align: left; width: 100%; font: inherit; color: inherit; cursor: pointer; }
+.macro-btn { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; }
+.macros { flex-wrap: wrap; align-items: center; }
+.chips.atalhos { margin: 0 0 10px; }

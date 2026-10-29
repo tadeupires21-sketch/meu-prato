@@ -78,12 +78,13 @@ function dadosVazios() {
   return {
     versao: VERSAO_DADOS,
     config: { metas: { kcal: 2000, prot: 120, carb: null, gord: null }, refeicoesPadrao: [...REFEICOES_PADRAO], consultarOFF: true, metaAgua: 2000, copoAgua: 250 },
-    alimentos: [], receitas: [], dias: {}, recentes: []
+    alimentos: [], receitas: [], dias: {}, recentes: [], porcoes: {}
   };
 }
 function modoDemo() { try { return localStorage.getItem(CHAVE_MODO) === 'demo'; } catch { return false; } }
 function chaveAtual() { return modoDemo() ? CHAVE_DEMO : CHAVE_REAL; }
 
+const UI = { aba: 'hoje', data: hojeISO(), filtroAlimentos: 'todos', buscaAlimentos: '', histDias: 7, falhaSalvar: null, dadosCorrompidos: null };
 let D = carregar();
 function carregar() {
   let bruto = null;
@@ -93,17 +94,35 @@ function carregar() {
     if (modoDemo()) semearDemo(novo);
     return novo;
   }
+  let erro = null;
   try {
     const obj = JSON.parse(bruto);
     const v = validarDados(obj);
-    if (!v.ok) { console.warn('Dados locais inválidos:', v.erro); return dadosVazios(); }
-    return normalizar(obj);
-  } catch (e) { console.warn('Falha ao ler dados locais', e); return dadosVazios(); }
+    if (v.ok) return normalizar(obj);
+    erro = v.erro;
+  } catch (e) { erro = 'falha ao ler: ' + e.message; }
+  // Conteúdo inválido: guarda o original à parte (nunca sobrescreve) e começa vazio, avisando.
+  console.warn('Dados locais inválidos:', erro);
+  try { if (!localStorage.getItem(chaveAtual() + '.corrompido')) localStorage.setItem(chaveAtual() + '.corrompido', bruto); } catch { /* sem espaço: o original continua na chave principal até a próxima gravação */ }
+  UI.dadosCorrompidos = { erro, tamanho: bruto.length };
+  return dadosVazios();
 }
+function brutoCorrompido() { try { return localStorage.getItem(chaveAtual() + '.corrompido'); } catch { return null; } }
+// Retorna true só se gravou. Em falha, mostra banner persistente e bloqueia toasts de sucesso por alguns segundos,
+// para o aviso de erro não ser coberto por "salvo com sucesso" de quem chamou.
 function salvar() {
-  try { localStorage.setItem(chaveAtual(), JSON.stringify(D)); }
-  catch (e) { toast('Não foi possível salvar: armazenamento indisponível ou cheio.'); console.error(e); }
+  try {
+    localStorage.setItem(chaveAtual(), JSON.stringify(D));
+    if (UI.falhaSalvar) { UI.falhaSalvar = null; mostrarBannerErro(); }
+    return true;
+  } catch (e) {
+    console.error(e);
+    UI.falhaSalvar = 'A última alteração NÃO foi salva (armazenamento cheio ou bloqueado). Exporte um backup em Ajustes antes de continuar.';
+    mostrarBannerErro(); toast('Não foi possível salvar.', { erro: true });
+    return false;
+  }
 }
+function mostrarBannerErro() { const b = $('#erro-banner'); if (!b) return; const msg = UI.falhaSalvar || (UI.dadosCorrompidos ? 'Os dados salvos neste navegador estavam ilegíveis e foram preservados à parte. Veja Ajustes → Dados e privacidade.' : ''); b.textContent = msg; b.hidden = !msg; }
 function normalizar(obj) {
   const base = dadosVazios();
   obj.config = Object.assign(base.config, obj.config || {});
@@ -113,30 +132,79 @@ function normalizar(obj) {
   if (!(obj.config.copoAgua > 0)) obj.config.copoAgua = 250;
   for (const dia of Object.values(obj.dias)) if (!Array.isArray(dia.agua)) dia.agua = [];
   if (!Array.isArray(obj.config.refeicoesPadrao) || !obj.config.refeicoesPadrao.length) obj.config.refeicoesPadrao = [...REFEICOES_PADRAO];
-  obj.alimentos = obj.alimentos || []; obj.receitas = obj.receitas || []; obj.dias = obj.dias || {}; obj.recentes = obj.recentes || [];
+  obj.alimentos = obj.alimentos || []; obj.receitas = obj.receitas || []; obj.dias = obj.dias || {}; obj.recentes = obj.recentes || []; obj.porcoes = obj.porcoes || {};
   for (const a of obj.alimentos) { a.medidas = a.medidas || []; a.favorito = !!a.favorito; }
   for (const r of obj.receitas) { r.ingredientes = r.ingredientes || []; r.favorito = !!r.favorito; }
   return obj;
 }
+function ehNum(v) { return typeof v === 'number' && isFinite(v); }
+function ehNumNaoNeg(v) { return ehNum(v) && v >= 0; }
+function ehObj(v) { return !!v && typeof v === 'object' && !Array.isArray(v); }
+// Valida estrutura e regras de domínio antes de aceitar dados (do armazenamento ou de um backup).
+// Campos novos são opcionais, para backups antigos continuarem válidos.
 function validarDados(obj) {
-  if (!obj || typeof obj !== 'object') return { ok: false, erro: 'não é um objeto JSON' };
+  if (!ehObj(obj)) return { ok: false, erro: 'não é um objeto JSON' };
   if (typeof obj.versao !== 'number') return { ok: false, erro: 'campo "versao" ausente' };
   if (obj.versao > VERSAO_DADOS) return { ok: false, erro: `versão ${obj.versao} é mais nova que a do app (${VERSAO_DADOS})` };
   if (!Array.isArray(obj.alimentos)) return { ok: false, erro: '"alimentos" deve ser uma lista' };
   if (!Array.isArray(obj.receitas)) return { ok: false, erro: '"receitas" deve ser uma lista' };
-  if (!obj.dias || typeof obj.dias !== 'object' || Array.isArray(obj.dias)) return { ok: false, erro: '"dias" deve ser um objeto por data' };
+  if (!ehObj(obj.dias)) return { ok: false, erro: '"dias" deve ser um objeto por data' };
+  if (obj.config !== undefined) {
+    if (!ehObj(obj.config)) return { ok: false, erro: '"config" inválida' };
+    const m = obj.config.metas;
+    if (m !== undefined) {
+      if (!ehObj(m)) return { ok: false, erro: 'metas inválidas' };
+      for (const k of ['kcal', 'prot']) if (m[k] !== undefined && !(ehNum(m[k]) && m[k] > 0)) return { ok: false, erro: `meta de ${k} inválida` };
+      for (const k of ['carb', 'gord']) if (m[k] != null && !ehNumNaoNeg(m[k])) return { ok: false, erro: `meta de ${k} inválida` };
+    }
+    for (const k of ['metaAgua', 'copoAgua']) if (obj.config[k] !== undefined && !(ehNum(obj.config[k]) && obj.config[k] > 0)) return { ok: false, erro: `${k} inválida` };
+    if (obj.config.refeicoesPadrao !== undefined && (!Array.isArray(obj.config.refeicoesPadrao) || obj.config.refeicoesPadrao.some((n) => typeof n !== 'string'))) return { ok: false, erro: 'refeições padrão inválidas' };
+  }
+  const ids = new Set();
+  const validarMedidas = (med, dono) => {
+    if (med === undefined) return null;
+    if (!Array.isArray(med)) return `medidas de "${dono}" devem ser lista`;
+    for (const x of med) if (!ehObj(x) || typeof x.nome !== 'string' || !x.nome.trim() || !(ehNum(x.equivale) && x.equivale > 0)) return `medida inválida em "${dono}"`;
+    return null;
+  };
   for (const a of obj.alimentos) {
-    if (!a.id || typeof a.nome !== 'string' || !(Number(a.refQtd) > 0)) return { ok: false, erro: `alimento inválido: ${JSON.stringify(a).slice(0, 80)}` };
-    for (const k of ['kcal', 'prot', 'carb', 'gord']) if (typeof a[k] !== 'number' || !isFinite(a[k])) return { ok: false, erro: `alimento "${a.nome}" com ${k} inválido` };
+    if (!ehObj(a) || typeof a.id !== 'string' || !a.id) return { ok: false, erro: 'alimento sem id' };
+    if (ids.has(a.id)) return { ok: false, erro: `id repetido: ${a.id}` }; ids.add(a.id);
+    if (typeof a.nome !== 'string' || !a.nome.trim()) return { ok: false, erro: `alimento ${a.id} sem nome` };
+    if (!(ehNum(a.refQtd) && a.refQtd > 0)) return { ok: false, erro: `alimento "${a.nome}" com quantidade de referência inválida` };
+    if (!['g', 'ml', 'porção'].includes(a.refUnidade)) return { ok: false, erro: `alimento "${a.nome}" com unidade de referência inválida` };
+    for (const k of ['kcal', 'prot', 'carb', 'gord']) if (!ehNumNaoNeg(a[k])) return { ok: false, erro: `alimento "${a.nome}" com ${k} inválido` };
+    const em = validarMedidas(a.medidas, a.nome); if (em) return { ok: false, erro: em };
+  }
+  for (const r of obj.receitas) {
+    if (!ehObj(r) || typeof r.id !== 'string' || !r.id) return { ok: false, erro: 'receita sem id' };
+    if (ids.has(r.id)) return { ok: false, erro: `id repetido: ${r.id}` }; ids.add(r.id);
+    if (typeof r.nome !== 'string' || !r.nome.trim()) return { ok: false, erro: `receita ${r.id} sem nome` };
+    if (!(ehNum(r.porcoes) && r.porcoes > 0)) return { ok: false, erro: `receita "${r.nome}" sem rendimento válido` };
+    if (r.pesoFinal != null && !(ehNum(r.pesoFinal) && r.pesoFinal > 0)) return { ok: false, erro: `receita "${r.nome}" com peso final inválido` };
+    if (!Array.isArray(r.ingredientes)) return { ok: false, erro: `receita "${r.nome}" sem lista de ingredientes` };
+    for (const ing of r.ingredientes) {
+      if (!ehObj(ing) || !(ehNum(ing.qtd) && ing.qtd > 0) || typeof ing.unidade !== 'string') return { ok: false, erro: `ingrediente inválido em "${r.nome}"` };
+      for (const k of ['kcal', 'prot', 'carb', 'gord']) if (!ehNumNaoNeg(ing[k])) return { ok: false, erro: `ingrediente com ${k} inválido em "${r.nome}"` };
+    }
   }
   for (const [data, dia] of Object.entries(obj.dias)) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) return { ok: false, erro: `data inválida: ${data}` };
-    if (!Array.isArray(dia.refeicoes)) return { ok: false, erro: `dia ${data} sem lista de refeições` };
-    if (dia.agua !== undefined && (!Array.isArray(dia.agua) || dia.agua.some((a) => !(typeof a.ml === 'number' && a.ml > 0)))) return { ok: false, erro: `registro de água inválido em ${data}` };
+    if (!ehObj(dia) || !Array.isArray(dia.refeicoes)) return { ok: false, erro: `dia ${data} sem lista de refeições` };
     for (const r of dia.refeicoes) {
-      if (!Array.isArray(r.itens)) return { ok: false, erro: `refeição sem itens em ${data}` };
-      for (const it of r.itens) for (const k of ['kcal', 'prot', 'carb', 'gord', 'qtd']) if (typeof it[k] !== 'number' || !isFinite(it[k])) return { ok: false, erro: `item com ${k} inválido em ${data}` };
+      if (!ehObj(r) || typeof r.nome !== 'string' || !Array.isArray(r.itens)) return { ok: false, erro: `refeição inválida em ${data}` };
+      for (const it of r.itens) {
+        if (!ehObj(it) || typeof it.rotulo !== 'string' || typeof it.unidade !== 'string') return { ok: false, erro: `item inválido em ${data}` };
+        if (!(ehNum(it.qtd) && it.qtd > 0)) return { ok: false, erro: `item com quantidade inválida em ${data}` };
+        for (const k of ['kcal', 'prot', 'carb', 'gord']) if (!ehNumNaoNeg(it[k])) return { ok: false, erro: `item com ${k} inválido em ${data}` };
+      }
     }
+    if (dia.agua !== undefined && (!Array.isArray(dia.agua) || dia.agua.some((a) => !ehObj(a) || !(ehNum(a.ml) && a.ml > 0)))) return { ok: false, erro: `registro de água inválido em ${data}` };
+  }
+  if (obj.recentes !== undefined && (!Array.isArray(obj.recentes) || obj.recentes.some((x) => !ehObj(x)))) return { ok: false, erro: '"recentes" inválido' };
+  if (obj.porcoes !== undefined) {
+    if (!ehObj(obj.porcoes)) return { ok: false, erro: '"porcoes" inválido' };
+    for (const [k, p] of Object.entries(obj.porcoes)) if (!ehObj(p) || !(ehNum(p.qtd) && p.qtd > 0) || typeof p.unidade !== 'string') return { ok: false, erro: `última porção inválida (${k})` };
   }
   return { ok: true };
 }
@@ -144,7 +212,7 @@ function validarDados(obj) {
 // ---------- Utilidades ----------
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 function hojeISO() { const d = new Date(); return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`; }
-const p2 = (n) => String(n).padStart(2, '0');
+function p2(n) { return String(n).padStart(2, '0'); }
 function somarDias(iso, n) { const [a, m, d] = iso.split('-').map(Number); const dt = new Date(a, m - 1, d + n); return `${dt.getFullYear()}-${p2(dt.getMonth() + 1)}-${p2(dt.getDate())}`; }
 function rotuloData(iso) {
   if (iso === hojeISO()) return 'Hoje';
@@ -155,11 +223,35 @@ function rotuloData(iso) {
 function dataCurta(iso) { const [a, m, d] = iso.split('-').map(Number); return new Date(a, m - 1, d).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' }).replace('.', ''); }
 function fmt(n, dec = 0) { if (n == null || !isFinite(n)) return '–'; return Number(n).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: dec }); }
 function num(str) { if (typeof str === 'number') return str; if (str == null) return NaN; const s = String(str).trim().replace(/\s/g, '').replace(',', '.'); if (s === '') return NaN; return Number(s); }
+// Busca: ignora acentos, caixa e ordem das palavras; nome vale mais que marca.
+function normTexto(t) { return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim(); }
+function pontuarBusca(q, nome, marca = '') {
+  const palavras = normTexto(q).split(' ').filter(Boolean); if (!palavras.length) return 1;
+  const n = normTexto(nome), m = normTexto(marca), nm = n + ' ' + m;
+  if (!palavras.every((p) => nm.includes(p))) return 0;
+  if (palavras.every((p) => n.includes(p))) return n.startsWith(palavras[0]) ? 3 : 2;
+  return 1;
+}
+function filtrarOrdenar(lista, q, nomeDe, marcaDe = () => '') {
+  return lista.map((x) => ({ x, p: pontuarBusca(q, nomeDe(x), marcaDe(x)) })).filter((o) => o.p > 0)
+    .sort((a, b) => b.p - a.p || nomeDe(a.x).localeCompare(nomeDe(b.x), 'pt-BR')).map((o) => o.x);
+}
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 function $(sel, root = document) { return root.querySelector(sel); }
 function $$(sel, root = document) { return [...root.querySelectorAll(sel)]; }
 let toastTimer;
-function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 2600); }
+let toastErroAte = 0;
+// toast(msg, { rotulo, acao }) mostra um botão (ex.: Desfazer). { erro: true } segura a tela por mais tempo e
+// impede que um toast de sucesso logo em seguida o cubra.
+function toast(msg, op = {}) {
+  const t = $('#toast');
+  if (!op.erro && Date.now() < toastErroAte) return;
+  t.textContent = ''; t.append(document.createTextNode(msg));
+  if (op.acao) { const b = document.createElement('button'); b.type = 'button'; b.className = 'toast-acao'; b.textContent = op.rotulo || 'Desfazer'; b.addEventListener('click', () => { t.hidden = true; op.acao(); }); t.append(b); }
+  t.hidden = false; clearTimeout(toastTimer);
+  const dur = op.erro ? 5000 : op.acao ? 5000 : 2600; if (op.erro) toastErroAte = Date.now() + 4000;
+  toastTimer = setTimeout(() => { t.hidden = true; }, dur);
+}
 function confirmar(msg) { return window.confirm(msg); }
 
 // ---------- Cálculos ----------
@@ -241,12 +333,15 @@ function totaisDia(dia) { return somar(dia ? dia.refeicoes.flatMap((r) => r.iten
 function registrarRecente(tipo, id) {
   D.recentes = [{ tipo, id, em: Date.now() }, ...D.recentes.filter((x) => !(x.tipo === tipo && x.id === id))].slice(0, 30);
 }
+// Última porção usada por alimento/receita: preferência, separada do diário. Por modo (real/demo), já que D é por modo.
+function lembrarPorcao(tipo, id, qtd, unidade) { D.porcoes[`${tipo}:${id}`] = { qtd, unidade, em: new Date().toISOString() }; }
+function ultimaPorcao(tipo, id) { return D.porcoes[`${tipo}:${id}`] || null; }
 
 // ---------- Estado de interface ----------
-const UI = { aba: 'hoje', data: hojeISO(), filtroAlimentos: 'todos', buscaAlimentos: '', histDias: 7 };
+// (UI é declarado antes de carregar(), no topo.)
 
 function render() {
-  $('#demo-banner').hidden = !modoDemo();
+  $('#demo-banner').hidden = !modoDemo(); mostrarBannerErro();
   $$('.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === UI.aba));
   const app = $('#app');
   if (UI.aba === 'hoje') app.innerHTML = telaHoje();
@@ -266,7 +361,7 @@ function telaHoje() {
   const protSaldo = m.prot - t.prot;
   const protTxt = protSaldo >= 0 ? `faltam ${fmt(protSaldo)} g` : `${fmt(-protSaldo)} g além da meta`;
   const pct = (v, meta) => meta > 0 ? Math.min(100, (v / meta) * 100) : 0;
-  const macro = (nome, v, meta) => `<div><span class="muted">${nome}</span> <b>${fmt(v)} g</b>${meta ? `<span class="muted"> / ${fmt(meta)}</span>` : ''}</div>`;
+  const macro = (nome, v, meta, k) => `<button class="macro-btn" data-act="detalhe" data-n="${k}"><span class="muted">${nome}</span> <b>${fmt(v)} g</b>${meta ? `<span class="muted"> de ${fmt(meta)}</span>` : ''}</button>`;
   const refeicoes = (dia ? dia.refeicoes : D.config.refeicoesPadrao.map((n) => ({ id: null, nome: n, itens: [] })));
   return `
   <div class="topbar">
@@ -280,17 +375,17 @@ function telaHoje() {
   ${UI.data !== hojeISO() ? `<button class="btn sm full" data-act="ir-hoje" style="margin-bottom:10px">Voltar para hoje</button>` : ''}
   <section class="card">
     <div class="summary">
-      <div class="stat"><div class="label">Calorias</div><div class="value">${fmt(t.kcal)}</div><div class="sub muted">de ${fmt(m.kcal)} kcal</div><div class="sub">${saldoTxt}</div><div class="bar"><span style="width:${pct(t.kcal, m.kcal)}%"></span></div></div>
-      <div class="stat prot"><div class="label">Proteínas</div><div class="value">${fmt(t.prot)} <small>g</small></div><div class="sub muted">de ${fmt(m.prot, 1)} g</div><div class="sub">${protTxt}</div><div class="bar"><span style="width:${pct(t.prot, m.prot)}%"></span></div></div>
+      <button class="stat" data-act="detalhe" data-n="kcal"><div class="label">Calorias</div><div class="value">${fmt(t.kcal)}</div><div class="sub muted">de ${fmt(m.kcal)} kcal</div><div class="sub">${saldoTxt}</div><div class="bar"><span style="width:${pct(t.kcal, m.kcal)}%"></span></div></button>
+      <button class="stat prot" data-act="detalhe" data-n="prot"><div class="label">Proteínas</div><div class="value">${fmt(t.prot)} <small>g</small></div><div class="sub muted">de ${fmt(m.prot, 1)} g</div><div class="sub">${protTxt}</div><div class="bar"><span style="width:${pct(t.prot, m.prot)}%"></span></div></button>
     </div>
-    <div class="macros">${macro('Carboidratos', t.carb, m.carb)}${macro('Gorduras', t.gord, m.gord)}</div>
+    <div class="macros">${macro('Carboidratos', t.carb, m.carb, 'carb')}${macro('Gorduras', t.gord, m.gord, 'gord')}<span class="muted small" style="margin-left:auto">toque para detalhar</span></div>
   </section>
   ${cartaoAgua(dia)}
   ${refeicoes.map((r, i) => {
     const st = somar(r.itens);
     return `<section class="card meal" data-ref="${r.id ?? ''}" data-idx="${i}">
       <div class="meal-head">
-        <div class="grow"><h2>${esc(r.nome)}</h2><div class="meal-sub">${r.itens.length ? `${fmt(st.kcal)} kcal · ${fmt(st.prot, 1)} g prot` : 'Nada registrado'}</div></div>
+        <div class="grow"><h2>${esc(r.nome)}</h2><div class="meal-sub">${r.itens.length ? `${fmt(st.kcal)} kcal · <span style="color:var(--prot)">P ${fmt(st.prot, 1)}</span> · C ${fmt(st.carb, 1)} · G ${fmt(st.gord, 1)} g` : 'Nada registrado'}</div></div>
         <button class="btn icon ghost" data-act="menu-refeicao" data-idx="${i}" aria-label="Opções da refeição">⋯</button>
       </div>
       ${r.itens.map((it) => `<button class="entry" data-act="editar-item" data-idx="${i}" data-item="${it.id}">
@@ -307,16 +402,15 @@ function telaHoje() {
 
 // ---------- Tela: Alimentos ----------
 function telaAlimentos() {
-  const f = UI.filtroAlimentos; const q = UI.buscaAlimentos.trim().toLowerCase();
-  const bate = (s) => !q || s.toLowerCase().includes(q);
+  const f = UI.filtroAlimentos; const q = UI.buscaAlimentos.trim();
   let html = `<div class="topbar"><h1 class="title">Alimentos e receitas</h1></div>
   <input class="search" type="search" placeholder="Buscar por nome ou marca" value="${esc(UI.buscaAlimentos)}" data-act="busca-alimentos" aria-label="Buscar">
   <div class="chips">${[['todos', 'Todos'], ['favoritos', 'Favoritos'], ['receitas', 'Receitas']].map(([k, n]) => `<button class="chip ${f === k ? 'active' : ''}" data-act="filtro-alimentos" data-f="${k}">${n}</button>`).join('')}</div>
   <div class="grid3" style="margin-bottom:12px"><button class="btn primary" data-act="novo-alimento">+ Alimento</button><button class="btn" data-act="nova-receita">+ Receita</button><button class="btn" data-act="ler-codigo">▥ Código</button></div>
   <section class="card">`;
   const itens = [];
-  if (f !== 'receitas') for (const a of D.alimentos) if ((f !== 'favoritos' || a.favorito) && bate(a.nome + ' ' + (a.marca || ''))) itens.push(itemListaAlimento(a, 'abrir-alimento'));
-  if (f !== 'todos' || true) for (const r of D.receitas) if ((f === 'receitas' || f === 'todos' || (f === 'favoritos' && r.favorito)) && bate(r.nome)) itens.push(itemListaReceita(r, 'abrir-receita'));
+  if (f !== 'receitas') for (const a of filtrarOrdenar(D.alimentos.filter((a) => f !== 'favoritos' || a.favorito), q, (a) => a.nome, (a) => a.marca)) itens.push(itemListaAlimento(a, 'abrir-alimento'));
+  for (const r of filtrarOrdenar(D.receitas.filter((r) => f !== 'favoritos' || r.favorito), q, (r) => r.nome)) itens.push(itemListaReceita(r, 'abrir-receita'));
   html += itens.length ? itens.join('') : `<div class="empty">${D.alimentos.length || D.receitas.length ? 'Nada encontrado com esse filtro.' : 'Nenhum alimento cadastrado ainda. Toque em “+ Alimento” para começar.'}</div>` + (D.alimentos.length ? '' : `<button class="btn full" data-act="importar-base" style="margin-top:8px">Adicionar alimentos comuns (TACO)</button>`);
   html += `</section>`;
   return html;
@@ -407,6 +501,7 @@ function telaConfig() {
   <section class="card">
     <h2>Dados e privacidade</h2>
     <p class="help">Tudo fica salvo <b>somente neste aparelho e neste navegador</b> (armazenamento local, ~${usoKB} KB em uso). Não há conta nem envio para servidor. Isso significa: trocar de celular, limpar os dados do navegador ou desinstalar o app apaga os registros. Faça backup em JSON com alguma frequência.</p>
+    ${brutoCorrompido() ? `<div class="help" style="background:var(--warn-soft);padding:10px;border-radius:10px"><b>Dados anteriores preservados.</b> O conteúdo salvo antes estava ilegível${UI.dadosCorrompidos ? ` (${esc(UI.dadosCorrompidos.erro)})` : ''} e foi guardado à parte, sem ser apagado. Baixe-o para tentar recuperar; depois, se quiser, descarte.<div class="row" style="margin-top:8px"><button class="btn sm grow" data-act="baixar-corrompido">Baixar dados brutos</button><button class="btn sm danger" data-act="descartar-corrompido">Descartar</button></div></div>` : ''}
     <div class="stack">
       <button class="btn full" data-act="exportar-json">Exportar backup (JSON)</button>
       <button class="btn full" data-act="importar-json">Importar backup (JSON)</button>
@@ -447,17 +542,17 @@ function menu(titulo, opcoes) {
 }
 
 // ----- Escolher alimento/receita para uma refeição -----
-function folhaEscolher(idxRefeicao, aoEscolher) {
+function folhaEscolher(idxRefeicao, aoEscolher, resumo = '') {
   let filtro = 'recentes'; let busca = '';
   if (!D.recentes.length) filtro = D.alimentos.some((a) => a.favorito) || D.receitas.some((r) => r.favorito) ? 'favoritos' : 'todos';
   const desenhar = (s) => {
-    const q = busca.trim().toLowerCase(); const bate = (t) => !q || t.toLowerCase().includes(q);
+    const q = busca.trim();
     let lista = [];
     if (q) filtro = 'todos';
     if (filtro === 'recentes') lista = D.recentes.map((x) => x.tipo === 'alimento' ? D.alimentos.find((a) => a.id === x.id) : Object.assign({ _receita: true }, D.receitas.find((r) => r.id === x.id))).filter((x) => x && x.id);
     else if (filtro === 'favoritos') lista = [...D.alimentos.filter((a) => a.favorito), ...D.receitas.filter((r) => r.favorito).map((r) => Object.assign({ _receita: true }, r))];
     else if (filtro === 'receitas') lista = D.receitas.map((r) => Object.assign({ _receita: true }, r));
-    else lista = [...D.alimentos.filter((a) => bate(a.nome + ' ' + (a.marca || ''))), ...D.receitas.filter((r) => bate(r.nome)).map((r) => Object.assign({ _receita: true }, r))];
+    else lista = filtrarOrdenar([...D.alimentos, ...D.receitas.map((r) => Object.assign({ _receita: true }, r))], q, (x) => x.nome, (x) => x.marca || '');
     $('.lista', s).innerHTML = (lista.length ? lista.map((x) => x._receita ? itemListaReceita(x, 'pick-receita') : itemListaAlimento(x, 'pick-alimento')).join('')
       : `<div class="empty">${filtro === 'recentes' ? 'Nada usado recentemente.' : filtro === 'favoritos' ? 'Nenhum favorito ainda.' : 'Nada encontrado.'}</div>`)
       + `<button class="list-item" data-act="pick-novo"><div class="grow"><div class="name" style="color:var(--brand)">+ Cadastrar novo alimento${q ? ` “${esc(busca.trim())}”` : ''}</div></div></button>`;
@@ -467,6 +562,7 @@ function folhaEscolher(idxRefeicao, aoEscolher) {
     $('[data-act="pick-novo"]', s).addEventListener('click', () => folhaAlimento(null, { nome: busca.trim() }, (novo) => aoEscolher('alimento', novo.id)));
   };
   abrirFolha(`${cab('Adicionar alimento')}
+    ${resumo ? `<p class="help resumo-refeicao" style="margin-top:-6px">${esc(resumo)}</p>` : ''}
     <div class="row" style="margin-bottom:10px"><input class="search" type="search" placeholder="Buscar nos meus alimentos" aria-label="Buscar" autofocus style="margin:0"><button class="btn" data-act="pick-codigo" aria-label="Ler código de barras" title="Código de barras">▥</button></div>
     <div class="chips">${[['recentes', 'Recentes'], ['favoritos', 'Favoritos'], ['todos', 'Todos'], ['receitas', 'Receitas']].map(([k, n]) => `<button class="chip" data-f="${k}">${n}</button>`).join('')}</div>
     <div class="lista"></div>`, (s) => {
@@ -479,12 +575,17 @@ function folhaEscolher(idxRefeicao, aoEscolher) {
 }
 
 // ----- Quantidade (novo registro ou edição) -----
-function folhaQuantidade({ tipo, id, item, idxRefeicao, aoConfirmar }) {
+function folhaQuantidade({ tipo, id, item, idxRefeicao, aoConfirmar, aoContinuar }) {
   const ref = tipo === 'alimento' ? D.alimentos.find((a) => a.id === id) : D.receitas.find((r) => r.id === id);
   if (!ref) { toast('Cadastro original não encontrado. Edite a quantidade a partir do registro.'); return; }
   const unidades = tipo === 'alimento' ? unidadesAlimento(ref) : unidadesReceita(ref);
-  const qtdIni = item ? item.qtd : (tipo === 'alimento' ? ref.refQtd : 1);
-  const uniIni = item && unidades.some((u) => u.nome === item.unidade) ? item.unidade : unidades[0].nome;
+  // Sugestão inicial: a última porção usada (se a unidade ainda existir), senão a referência do cadastro.
+  const ultima = item ? null : ultimaPorcao(tipo, id);
+  const ultimaValida = ultima && unidades.some((u) => u.nome === ultima.unidade);
+  let avisoPorcao = '';
+  if (ultima && !ultimaValida) avisoPorcao = `A medida “${ultima.unidade}” da última vez não existe mais neste cadastro; usando ${unidades[0].nome}.`;
+  const qtdIni = item ? item.qtd : ultimaValida ? ultima.qtd : (tipo === 'alimento' ? ref.refQtd : 1);
+  const uniIni = item && unidades.some((u) => u.nome === item.unidade) ? item.unidade : ultimaValida ? ultima.unidade : unidades[0].nome;
   const titulo = tipo === 'alimento' ? rotuloAlimento(ref) : ref.nome;
   const calc = (q, u) => tipo === 'alimento' ? nutrientesAlimento(ref, q, u) : nutrientesReceita(ref, q, u);
   abrirFolha(`${cab(item ? 'Editar quantidade' : 'Quantidade')}
@@ -495,33 +596,92 @@ function folhaQuantidade({ tipo, id, item, idxRefeicao, aoConfirmar }) {
     </div>
     ${tipo === 'alimento' ? `<p class="help">Referência: ${fmt(ref.kcal)} kcal e ${fmt(ref.prot, 1)} g de proteína por ${fmt(ref.refQtd, 2)} ${esc(ref.refUnidade)}.${ref.medidas.length ? '' : ' Para usar unidade, colher ou scoop, cadastre a equivalência no alimento.'}</p>`
       : `<p class="help">Rende ${fmt(ref.porcoes, 2)} porção(ões)${ref.pesoFinal ? ` · ${fmt(ref.pesoFinal)} g no total` : ' · sem peso final informado, então só é possível registrar em porções'}.</p>`}
+    ${ultimaValida ? `<p class="help ultima" style="margin-top:0">Última vez: <b>${fmt(ultima.qtd, 3)} ${esc(ultima.unidade)}</b>. Ajuste se for diferente.</p>` : ''}
+    ${avisoPorcao ? `<p class="help" style="margin-top:0;background:var(--warn-soft);padding:8px 10px;border-radius:8px">${esc(avisoPorcao)}</p>` : ''}
+    <div class="chips atalhos" aria-label="Atalhos de quantidade"></div>
     <div class="preview" aria-live="polite"></div>
-    <button class="btn primary full" data-ok>${item ? 'Salvar' : 'Adicionar'}</button>`, (s) => {
-    const inQ = $('[name=qtd]', s), inU = $('[name=uni]', s), pv = $('.preview', s), ok = $('[data-ok]', s);
+    <button class="btn primary full" data-ok>${item ? 'Salvar' : 'Adicionar'}</button>
+    ${aoContinuar ? '<button class="btn full" data-continuar style="margin-top:8px">Adicionar e continuar</button>' : ''}`, (s) => {
+    const inQ = $('[name=qtd]', s), inU = $('[name=uni]', s), pv = $('.preview', s), ok = $('[data-ok]', s), cont = $('[data-continuar]', s), at = $('.atalhos', s);
+    const ehBase = (u) => u === 'g' || u === 'ml';
+    const atalhos = () => {
+      const u = inU.value; const vals = ehBase(u) ? [50, 100, 150, 200, 250] : [0.5, 1, 1.5, 2, 3];
+      const fator = ehBase(u) ? 1 : (unidades.find((x) => x.nome === u) || {}).fator;
+      at.innerHTML = vals.map((v) => `<button type="button" class="chip" data-v="${v}">${fmt(v, 1)}${ehBase(u) ? ' ' + u : ''}${fator && fator !== 1 && tipo === 'alimento' ? ` <span class="muted">(${fmt(v * fator, 0)} ${esc(ref.refUnidade)})</span>` : ''}</button>`).join('');
+      $$('.chip', at).forEach((c) => c.addEventListener('click', () => { inQ.value = fmt(Number(c.dataset.v), 3); atualizar(); inQ.focus(); }));
+    };
     const atualizar = () => {
       const q = num(inQ.value);
-      if (!(q > 0)) { pv.innerHTML = '<span style="grid-column:1/-1">Informe uma quantidade maior que zero.</span>'; ok.disabled = true; return; }
-      const n = calc(q, inU.value); ok.disabled = false;
+      $$('.chip', at).forEach((c) => c.classList.toggle('active', Number(c.dataset.v) === q));
+      if (!(q > 0)) { pv.innerHTML = '<span style="grid-column:1/-1">Informe uma quantidade maior que zero.</span>'; ok.disabled = true; if (cont) cont.disabled = true; return; }
+      const n = calc(q, inU.value); ok.disabled = false; if (cont) cont.disabled = false;
       pv.innerHTML = `<div><b>${fmt(n.kcal)}</b><span>kcal</span></div><div><b>${fmt(n.prot, 1)}</b><span>g prot</span></div><div><b>${fmt(n.carb, 1)}</b><span>g carb</span></div><div><b>${fmt(n.gord, 1)}</b><span>g gord</span></div>`;
     };
-    inQ.addEventListener('input', atualizar); inU.addEventListener('change', atualizar); atualizar();
+    inQ.addEventListener('input', atualizar); inU.addEventListener('change', () => { atalhos(); atualizar(); }); atalhos(); atualizar();
     inQ.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !ok.disabled) ok.click(); });
-    ok.addEventListener('click', () => {
-      const q = num(inQ.value); if (!(q > 0)) return;
+    let enviado = false; // evita duplicar por toque repetido
+    const confirmar_ = (cb) => {
+      if (enviado) return; const q = num(inQ.value); if (!(q > 0)) return; enviado = true;
       const n = calc(q, inU.value);
       fecharFolha(); // antes do callback: ele pode abrir outra folha (ex.: voltar ao formulário da receita)
-      aoConfirmar({ qtd: q, unidade: inU.value, rotulo: titulo, ...n });
-    });
+      cb({ qtd: q, unidade: inU.value, rotulo: titulo, ...n });
+    };
+    ok.addEventListener('click', () => confirmar_(aoConfirmar));
+    if (cont) cont.addEventListener('click', () => confirmar_(aoContinuar));
     setTimeout(() => { inQ.focus(); inQ.select(); }, 50);
   });
 }
 
 function adicionarItem(idxRefeicao, tipo, id) {
-  folhaQuantidade({ tipo, id, idxRefeicao, aoConfirmar: (dados) => {
+  const inserir = (dados) => {
     const dia = obterDia(UI.data); const ref = dia.refeicoes[idxRefeicao];
-    ref.itens.push({ id: uid(), tipo, refId: id, criadoEm: new Date().toISOString(), ...dados });
-    registrarRecente(tipo, id); salvar(); render(); toast(`${dados.rotulo} adicionado em ${ref.nome}.`);
-  } });
+    const novo = { id: uid(), tipo, refId: id, criadoEm: new Date().toISOString(), ...dados };
+    ref.itens.push(novo); registrarRecente(tipo, id); lembrarPorcao(tipo, id, dados.qtd, dados.unidade);
+    const ok = salvar(); render();
+    if (ok) toast(`${dados.rotulo} em ${ref.nome}: ${fmt(dados.kcal)} kcal.`, { rotulo: 'Desfazer', acao: () => { ref.itens = ref.itens.filter((x) => x.id !== novo.id); salvar(); render(); if ($('.sheet .resumo-refeicao')) abrirSeletor(idxRefeicao); } });
+    return ref;
+  };
+  folhaQuantidade({ tipo, id, idxRefeicao,
+    aoConfirmar: inserir,
+    aoContinuar: (dados) => { inserir(dados); abrirSeletor(idxRefeicao); } });
+}
+// Seletor de alimentos para uma refeição, com o parcial da refeição no cabeçalho.
+function abrirSeletor(idxRefeicao) {
+  const dia = obterDia(UI.data); const ref = dia.refeicoes[idxRefeicao]; if (!ref) return;
+  const t = somar(ref.itens);
+  folhaEscolher(idxRefeicao, (tipo, id) => adicionarItem(idxRefeicao, tipo, id), `${ref.nome} · ${rotuloData(UI.data).toLowerCase()} · ${ref.itens.length} ${ref.itens.length === 1 ? 'item' : 'itens'} · ${fmt(t.kcal)} kcal`);
+}
+
+// ----- Detalhe do dia: de onde vem cada nutriente -----
+const NUTRIENTES = { kcal: { nome: 'Calorias', un: 'kcal', dec: 0 }, prot: { nome: 'Proteínas', un: 'g', dec: 1 }, carb: { nome: 'Carboidratos', un: 'g', dec: 1 }, gord: { nome: 'Gorduras', un: 'g', dec: 1 } };
+function folhaDetalheDia(n0 = 'kcal') {
+  let n = NUTRIENTES[n0] ? n0 : 'kcal';
+  const desenhar = (s) => {
+    const dia = obterDia(UI.data, false); const info = NUTRIENTES[n]; const m = D.config.metas[n];
+    const itens = dia ? dia.refeicoes.flatMap((r, i) => r.itens.map((it) => ({ it, r, i }))) : [];
+    const total = itens.reduce((a, x) => a + x.it[n], 0);
+    const pct = (v) => total > 0 ? `${fmt(v / total * 100)}%` : '–';
+    const porRef = dia ? dia.refeicoes.map((r) => ({ r, v: r.itens.reduce((a, it) => a + it[n], 0) })) : [];
+    const maiores = [...itens].sort((a, b) => b.it[n] - a.it[n]).slice(0, 10);
+    const difTxt = m ? (m - total >= 0 ? `faltam ${fmt(m - total, info.dec)} ${info.un} para a meta de ${fmt(m, info.dec)}` : `${fmt(total - m, info.dec)} ${info.un} além da meta de ${fmt(m, info.dec)}`) : 'sem meta definida para este nutriente';
+    $$('.chip', s).forEach((c) => c.classList.toggle('active', c.dataset.n === n));
+    $('.corpo', s).innerHTML = `
+      <div class="stat ${n === 'prot' ? 'prot' : ''}" style="margin-bottom:12px"><div class="label">${info.nome} registradas ${rotuloData(UI.data).toLowerCase()}${dia && dia.concluido ? '' : ' <span class="badge neutral">dia em aberto · parcial</span>'}</div>
+        <div class="value">${fmt(total, info.dec)} <small>${info.un}</small></div><div class="sub">${difTxt}</div>${m ? `<div class="bar"><span style="width:${Math.min(100, total / m * 100)}%"></span></div>` : ''}</div>
+      ${!itens.length ? '<div class="empty">Nenhum alimento registrado neste dia.</div>' : `
+      <h3>Por refeição</h3>
+      ${porRef.map(({ r, v }) => `<div class="ing"><div class="grow">${esc(r.nome)}</div><div style="text-align:right"><b>${fmt(v, info.dec)} ${info.un}</b> <span class="muted small">· ${pct(v)}</span><div class="bar" style="width:120px;margin:4px 0 0 auto"><span style="width:${total > 0 ? v / total * 100 : 0}%"></span></div></div></div>`).join('')}
+      <h3 style="margin-top:14px">Maiores contribuições</h3>
+      <p class="help" style="margin-top:2px">Participação no total registrado do dia. Toque para corrigir o registro.</p>
+      ${maiores.map(({ it, r, i }) => `<button class="list-item" data-item="${it.id}" data-idx="${i}"><div class="grow"><div class="name">${esc(it.rotulo)}</div><div class="meta">${fmt(it.qtd, 2)} ${esc(it.unidade)} · ${esc(r.nome)}</div></div><div style="text-align:right"><b>${fmt(it[n], info.dec)} ${info.un}</b><div class="small muted">${pct(it[n])}</div></div></button>`).join('')}`}`;
+    $$('[data-item]', s).forEach((b) => b.addEventListener('click', () => { fecharFolha(); folhaItem(Number(b.dataset.idx), b.dataset.item); }));
+  };
+  abrirFolha(`${cab('Detalhe do dia')}
+    <div class="chips">${Object.entries(NUTRIENTES).map(([k, v]) => `<button class="chip" data-n="${k}">${v.nome}</button>`).join('')}</div>
+    <div class="corpo"></div>`, (s) => {
+    $$('.chip', s).forEach((c) => c.addEventListener('click', () => { n = c.dataset.n; desenhar(s); }));
+    desenhar(s);
+  });
 }
 
 // ----- Editar item registrado -----
@@ -567,7 +727,7 @@ function folhaCopiar(idxDestino) {
   const desenhar = (s) => {
     const dia = D.dias[data]; const lista = $('.lista', s);
     if (!diaTemRegistro(dia)) { lista.innerHTML = '<div class="empty">Nenhum registro nessa data.</div>'; return; }
-    lista.innerHTML = dia.refeicoes.filter((r) => r.itens.length).map((r, i) => { const t = somar(r.itens); return `<button class="list-item" data-i="${dia.refeicoes.indexOf(r)}"><div class="grow"><div class="name">${esc(r.nome)}</div><div class="meta">${r.itens.map((x) => x.rotulo).join(', ')} · ${fmt(t.kcal)} kcal</div></div><span class="muted">copiar ›</span></button>`; }).join('');
+    lista.innerHTML = dia.refeicoes.filter((r) => r.itens.length).map((r, i) => { const t = somar(r.itens); return `<button class="list-item" data-i="${dia.refeicoes.indexOf(r)}"><div class="grow"><div class="name">${esc(r.nome)}</div><div class="meta">${esc(r.itens.map((x) => x.rotulo).join(', '))} · ${fmt(t.kcal)} kcal</div></div><span class="muted">copiar ›</span></button>`; }).join('');
     $$('.list-item', lista).forEach((b) => b.addEventListener('click', () => {
       const origem = dia.refeicoes[Number(b.dataset.i)]; const destino = obterDia(UI.data).refeicoes[idxDestino];
       for (const it of origem.itens) destino.itens.push({ ...it, id: uid(), criadoEm: new Date().toISOString() });
@@ -651,7 +811,7 @@ function folhaAlimento(id, inicial = {}, aoSalvar) {
       }
       else { salvo = { id: uid(), ...campos, criadoEm: new Date().toISOString() }; D.alimentos.push(salvo); }
       D.alimentos.sort((x, y) => x.nome.localeCompare(y.nome, 'pt-BR'));
-      salvar(); fecharFolha(); render(); toast(a ? 'Alimento atualizado.' : 'Alimento cadastrado.');
+      const gravou = salvar(); fecharFolha(); render(); if (gravou) toast(a ? 'Alimento atualizado.' : 'Alimento cadastrado.');
       if (aoSalvar) aoSalvar(salvo);
     });
     if (a) {
@@ -725,7 +885,7 @@ function folhaReceita(id, rascunho = null, ingsIniciais = null) {
       const campos = { nome, porcoes, pesoFinal: pf, favorito: form.favorito.checked, ingredientes: ings, atualizadoEm: new Date().toISOString() };
       if (r) Object.assign(r, campos); else D.receitas.push({ id: uid(), ...campos, criadoEm: campos.atualizadoEm });
       D.receitas.sort((x, y) => x.nome.localeCompare(y.nome, 'pt-BR'));
-      salvar(); fecharFolha(); render(); toast(r ? 'Receita atualizada.' : 'Receita salva.');
+      const gravou = salvar(); fecharFolha(); render(); if (gravou) toast(r ? 'Receita atualizada.' : 'Receita salva.');
     });
     if (r) $('[data-del]', s).addEventListener('click', () => { if (!confirmar(`Excluir a receita “${r.nome}”? Registros antigos não mudam.`)) return; D.receitas = D.receitas.filter((x) => x !== r); D.recentes = D.recentes.filter((x) => !(x.tipo === 'receita' && x.id === r.id)); salvar(); fecharFolha(); render(); });
   });
@@ -733,8 +893,8 @@ function folhaReceita(id, rascunho = null, ingsIniciais = null) {
 function folhaEscolherIngrediente(aoEscolher, aoCancelar) {
   let busca = '';
   const desenhar = (s) => {
-    const q = busca.trim().toLowerCase();
-    const lista = D.alimentos.filter((a) => !q || (a.nome + ' ' + (a.marca || '')).toLowerCase().includes(q));
+    const q = busca.trim();
+    const lista = filtrarOrdenar(D.alimentos, q, (a) => a.nome, (a) => a.marca);
     $('.lista', s).innerHTML = (lista.length ? lista.map((a) => itemListaAlimento(a, 'pick')).join('') : '<div class="empty">Nenhum alimento encontrado.</div>')
       + `<button class="list-item" data-act="novo"><div class="grow"><div class="name" style="color:var(--brand)">+ Cadastrar novo alimento</div></div></button>`;
     $$('[data-act="pick"]', s).forEach((b) => b.addEventListener('click', () => aoEscolher(D.alimentos.find((a) => a.id === b.dataset.id))));
@@ -794,8 +954,11 @@ function mapearOFF(p, codigo) {
   let kcal = num100('energy-kcal_100g');
   if (kcal === '' && num100('energy-kj_100g') !== '') kcal = Math.round(num100('energy-kj_100g') / 4.184);
   if (kcal === '' && num100('energy_100g') !== '') kcal = Math.round(num100('energy_100g') / 4.184);
-  const liquido = /\bml\b/i.test(p.quantity || '') && !/\bg\b/i.test(p.quantity || '');
+  // A base (100 g ou 100 ml) vem inferida do texto da embalagem; é só um palpite que o usuário confere.
+  const qtdTxt = p.quantity || '';
+  const liquido = /\b(ml|l|litros?)\b/i.test(qtdTxt) && !/\b(g|kg|gramas?)\b/i.test(qtdTxt);
   const refUnidade = liquido ? 'ml' : 'g';
+  const avisoBase = qtdTxt ? ` Base assumida: 100 ${refUnidade} (embalagem "${qtdTxt}"); se o rótulo informar por 100 ${refUnidade === 'g' ? 'ml' : 'g'}, troque a unidade.` : ' Base assumida: 100 g; confira se o rótulo não é por 100 ml.';
   const medidas = [];
   const m = /([\d.,]+)\s*(g|ml)/i.exec(p.serving_size || '');
   if (m && m[2].toLowerCase() === refUnidade) { const q = num(m[1]); if (q > 0) medidas.push({ nome: 'porção do rótulo', equivale: q }); }
@@ -804,7 +967,7 @@ function mapearOFF(p, codigo) {
     nome: (p.product_name_pt || p.product_name || '').trim(), marca: (p.brands || '').split(',')[0].trim(), refQtd: 100, refUnidade,
     kcal, prot: num100('proteins_100g'), carb: num100('carbohydrates_100g'), gord: num100('fat_100g'), medidas,
     codigoBarras: codigo, fonte: FONTE_OFF,
-    obs: `Dados do ${FONTE_OFF} (base colaborativa): confira com o rótulo antes de salvar.${faltando.length ? ` Faltou no cadastro deles: ${faltando.join(', ')}.` : ''}${p.serving_size ? ` Porção informada: ${p.serving_size}.` : ''}`,
+    obs: `Dados do ${FONTE_OFF} (base colaborativa): confira com o rótulo antes de salvar.${faltando.length ? ` Faltou no cadastro deles: ${faltando.join(', ')}.` : ''}${p.serving_size ? ` Porção informada: ${p.serving_size}.` : ''}${avisoBase}`,
   };
 }
 // Fluxo: código → alimento já cadastrado (callback direto) → consulta OFF → formulário preenchido → callback ao salvar.
@@ -991,8 +1154,9 @@ document.addEventListener('click', (e) => {
     'agua-mais': () => { const ml = num(el.dataset.ml); const dia = obterDia(UI.data); dia.agua.push({ id: uid(), ml, em: new Date().toISOString() }); salvar(); render(); },
     'agua-outro': () => folhaAgua(),
     'agua-desfazer': () => { const dia = obterDia(UI.data); const u = dia.agua.pop(); if (u) { salvar(); render(); toast(`Removidos ${fmt(u.ml)} ml.`); } },
-    'adicionar': () => { const idx = Number(el.dataset.idx); obterDia(UI.data); folhaEscolher(idx, (tipo, id) => adicionarItem(idx, tipo, id)); },
+    'adicionar': () => { obterDia(UI.data); abrirSeletor(Number(el.dataset.idx)); },
     'editar-item': () => folhaItem(Number(el.dataset.idx), el.dataset.item),
+    'detalhe': () => folhaDetalheDia(el.dataset.n),
     'menu-refeicao': () => { obterDia(UI.data); menuRefeicao(Number(el.dataset.idx)); },
     'nova-refeicao': () => { const n = prompt('Nome da nova refeição:', 'Ceia'); if (n && n.trim()) { obterDia(UI.data).refeicoes.push({ id: uid(), nome: n.trim(), itens: [] }); salvar(); render(); } },
     'filtro-alimentos': () => { UI.filtroAlimentos = el.dataset.f; render(); },
@@ -1004,6 +1168,8 @@ document.addEventListener('click', (e) => {
     'hist-dias': () => { UI.histDias = Number(el.dataset.n); render(); },
     'abrir-dia': () => { UI.data = el.dataset.data; UI.aba = 'hoje'; render(); },
     'exportar-json': exportarJSON,
+    'baixar-corrompido': () => { const b = brutoCorrompido(); if (b) baixar(`meu-prato-dados-brutos-${hojeISO()}.txt`, b, 'text/plain;charset=utf-8'); },
+    'descartar-corrompido': () => { if (!confirmar('Descartar os dados brutos preservados? Baixe antes se ainda não baixou.')) return; try { localStorage.removeItem(chaveAtual() + '.corrompido'); } catch { /* ignore */ } UI.dadosCorrompidos = null; mostrarBannerErro(); render(); },
     'exportar-csv': exportarCSV,
     'importar-json': () => $('[data-act="arquivo-json"]').click(),
     'alternar-demo': alternarDemo,
@@ -1032,12 +1198,12 @@ document.addEventListener('submit', (e) => {
     const carb = f.carb.value.trim() === '' ? null : num(f.carb.value), gord = f.gord.value.trim() === '' ? null : num(f.gord.value);
     if (!(kcal > 0) || !(prot > 0)) { toast('Calorias e proteínas devem ser números maiores que zero.'); return; }
     if ((carb !== null && !(carb >= 0)) || (gord !== null && !(gord >= 0))) { toast('Valor inválido em carboidratos ou gorduras.'); return; }
-    D.config.metas = { kcal, prot, carb, gord }; salvar(); toast('Metas salvas.');
+    D.config.metas = { kcal, prot, carb, gord }; if (salvar()) toast('Metas salvas.');
   }
   if (f.dataset.form === 'agua') {
     const meta = num(f.meta.value), copo = num(f.copo.value);
     if (!(meta > 0) || !(copo > 0)) { toast('Meta e copo devem ser números maiores que zero.'); return; }
-    D.config.metaAgua = Math.round(meta); D.config.copoAgua = Math.round(copo); salvar(); toast('Água salva.');
+    D.config.metaAgua = Math.round(meta); D.config.copoAgua = Math.round(copo); if (salvar()) toast('Água salva.');
   }
   if (f.dataset.form === 'refeicoes') {
     const lista = f.lista.value.split('\n').map((s) => s.trim()).filter(Boolean);
@@ -1053,6 +1219,6 @@ UI._ultimoHoje = hojeISO();
 if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
 
 // Exposto para testes automatizados (não usado pela interface).
-window.MeuPrato = { calc: { nutrientesAlimento, nutrientesReceita, totaisReceita }, dados: () => D, validar: validarDados };
+window.MeuPrato = { calc: { nutrientesAlimento, nutrientesReceita, totaisReceita }, dados: () => D, validar: validarDados, busca: { normTexto, pontuarBusca }, ui: UI };
 render();
 })();
