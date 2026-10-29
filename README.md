@@ -24,7 +24,9 @@ dependência, sem servidor de dados. Interface em pt-BR, feita para celular (And
 8. **Código de barras**: botão ▥ na busca de alimentos ou na aba Alimentos. Lê com a câmera ou aceita o código
    digitado; produto já cadastrado é reconhecido na hora, produto novo é consultado no Open Food Facts e
    aberto para conferência.
-9. Marque **Dia concluído** para o dia entrar nas médias do Histórico (7 ou 30 dias).
+9. **Água**: cartão na tela Hoje com copo que enche até a meta. Botões de copo, 500 ml, quantidade livre e
+   desfazer; meta e tamanho do copo em Ajustes. Entra no backup, no histórico e no CSV.
+10. Marque **Dia concluído** para o dia entrar nas médias do Histórico (7 ou 30 dias).
 
 ## Como os dados são guardados
 
