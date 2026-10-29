@@ -21,7 +21,10 @@ dependência, sem servidor de dados. Interface em pt-BR, feita para celular (And
    O `⋯` da refeição copia uma refeição de outro dia, renomeia ou remove.
 7. **Receitas**: ingredientes + rendimento em porções (+ peso final opcional). Registra-se por porção ou,
    com peso final, por grama.
-8. Marque **Dia concluído** para o dia entrar nas médias do Histórico (7 ou 30 dias).
+8. **Código de barras**: botão ▥ na busca de alimentos ou na aba Alimentos. Lê com a câmera ou aceita o código
+   digitado; produto já cadastrado é reconhecido na hora, produto novo é consultado no Open Food Facts e
+   aberto para conferência.
+9. Marque **Dia concluído** para o dia entrar nas médias do Histórico (7 ou 30 dias).
 
 ## Como os dados são guardados
 
@@ -41,7 +44,10 @@ dependência, sem servidor de dados. Interface em pt-BR, feita para celular (And
   opcionais, marcados com a fonte e editáveis. Medidas por unidade (ovo 50 g, banana 65 g, fatia de pão
   25 g, colher de aveia 15 g) são médias aproximadas de tabelas de medidas caseiras e vêm com aviso para
   pesar e ajustar; maçã e batata-doce não têm unidade sugerida. Whey é só um modelo: valores vêm do rótulo.
-- Sem conta, sincronização, código de barras, exercícios ou foto.
+- Código de barras: leitor pela câmera só no Chrome Android (`BarcodeDetector` nativo); em outros navegadores,
+  digitação do código. A consulta vai ao Open Food Facts (base colaborativa, cobertura parcial no Brasil) e
+  envia apenas o código; o resultado abre no formulário para conferência e pode ser desligada em Ajustes.
+- Sem conta, sincronização, exercícios ou foto.
 - O cache offline (`sw.js`) guarda a versão instalada; ao mudar arquivos, suba `VERSAO` em `sw.js`.
 
 ## Testes

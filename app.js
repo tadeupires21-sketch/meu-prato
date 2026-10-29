@@ -40,7 +40,7 @@ const MODELOS_BASE = [
 function dadosVazios() {
   return {
     versao: VERSAO_DADOS,
-    config: { metas: { kcal: 2000, prot: 120, carb: null, gord: null }, refeicoesPadrao: [...REFEICOES_PADRAO] },
+    config: { metas: { kcal: 2000, prot: 120, carb: null, gord: null }, refeicoesPadrao: [...REFEICOES_PADRAO], consultarOFF: true },
     alimentos: [], receitas: [], dias: {}, recentes: []
   };
 }
@@ -71,6 +71,7 @@ function normalizar(obj) {
   const base = dadosVazios();
   obj.config = Object.assign(base.config, obj.config || {});
   obj.config.metas = Object.assign(base.config.metas, obj.config.metas || {});
+  if (typeof obj.config.consultarOFF !== 'boolean') obj.config.consultarOFF = true;
   if (!Array.isArray(obj.config.refeicoesPadrao) || !obj.config.refeicoesPadrao.length) obj.config.refeicoesPadrao = [...REFEICOES_PADRAO];
   obj.alimentos = obj.alimentos || []; obj.receitas = obj.receitas || []; obj.dias = obj.dias || {}; obj.recentes = obj.recentes || [];
   for (const a of obj.alimentos) { a.medidas = a.medidas || []; a.favorito = !!a.favorito; }
@@ -231,7 +232,7 @@ function telaAlimentos() {
   let html = `<div class="topbar"><h1 class="title">Alimentos e receitas</h1></div>
   <input class="search" type="search" placeholder="Buscar por nome ou marca" value="${esc(UI.buscaAlimentos)}" data-act="busca-alimentos" aria-label="Buscar">
   <div class="chips">${[['todos', 'Todos'], ['favoritos', 'Favoritos'], ['receitas', 'Receitas']].map(([k, n]) => `<button class="chip ${f === k ? 'active' : ''}" data-act="filtro-alimentos" data-f="${k}">${n}</button>`).join('')}</div>
-  <div class="grid2" style="margin-bottom:12px"><button class="btn primary" data-act="novo-alimento">+ Alimento</button><button class="btn" data-act="nova-receita">+ Receita</button></div>
+  <div class="grid3" style="margin-bottom:12px"><button class="btn primary" data-act="novo-alimento">+ Alimento</button><button class="btn" data-act="nova-receita">+ Receita</button><button class="btn" data-act="ler-codigo">▥ Código</button></div>
   <section class="card">`;
   const itens = [];
   if (f !== 'receitas') for (const a of D.alimentos) if ((f !== 'favoritos' || a.favorito) && bate(a.nome + ' ' + (a.marca || ''))) itens.push(itemListaAlimento(a, 'abrir-alimento'));
@@ -244,7 +245,7 @@ function itemListaAlimento(a, act, extra = '') {
   const estado = a.estado && a.estado !== 'na' ? ` · ${a.estado}` : '';
   return `<button class="list-item" data-act="${act}" data-id="${a.id}" ${extra}>
     <div class="grow"><div class="name">${a.favorito ? '<span class="star">★</span> ' : ''}${esc(a.nome)}${a.marca ? ` <span class="muted">· ${esc(a.marca)}</span>` : ''}</div>
-    <div class="meta">${fmt(a.kcal)} kcal · ${fmt(a.prot, 1)} g prot por ${fmt(a.refQtd, 2)} ${esc(a.refUnidade)}${estado}${a.fonte ? ` · <span class="badge neutral">${esc(a.fonte)}</span>` : ''}</div></div><span class="muted">›</span></button>`;
+    <div class="meta">${fmt(a.kcal)} kcal · ${fmt(a.prot, 1)} g prot por ${fmt(a.refQtd, 2)} ${esc(a.refUnidade)}${estado}${a.fonte ? ` · <span class="badge neutral">${esc(a.fonte)}</span>` : ''}${a.codigoBarras ? ' · ▥' : ''}</div></div><span class="muted">›</span></button>`;
 }
 function itemListaReceita(r, act, extra = '') {
   const t = totaisReceita(r); const pp = r.porcoes > 0 ? t.kcal / r.porcoes : 0; const pr = r.porcoes > 0 ? t.prot / r.porcoes : 0;
@@ -311,6 +312,12 @@ function telaConfig() {
     ${MODELOS_BASE.map((m, i) => `<button class="btn full" data-act="modelo" data-i="${i}">Cadastrar ${esc(m.nome)} (do rótulo)</button>`).join('')}
   </section>
   <section class="card">
+    <h2>Código de barras</h2>
+    <p class="help">O leitor usa a câmera pelo próprio navegador (Chrome no Android). Ao ler um código novo, o app consulta o <b>Open Food Facts</b>, base aberta e colaborativa: envia só o código, recebe nome, marca e valores por 100 g, e abre o cadastro para você conferir com o rótulo antes de salvar. Produtos brasileiros nem sempre estão lá ou podem vir incompletos.</p>
+    <label class="check"><input type="checkbox" data-act="toggle-off" ${D.config.consultarOFF ? 'checked' : ''}> <span>Consultar o Open Food Facts ao ler um código</span></label>
+    <p class="small muted">Desligado, o código só fica salvo no alimento e o cadastro é todo manual.</p>
+  </section>
+  <section class="card">
     <h2>Dados e privacidade</h2>
     <p class="help">Tudo fica salvo <b>somente neste aparelho e neste navegador</b> (armazenamento local, ~${usoKB} KB em uso). Não há conta nem envio para servidor. Isso significa: trocar de celular, limpar os dados do navegador ou desinstalar o app apaga os registros. Faça backup em JSON com alguma frequência.</p>
     <div class="stack">
@@ -373,10 +380,11 @@ function folhaEscolher(idxRefeicao, aoEscolher) {
     $('[data-act="pick-novo"]', s).addEventListener('click', () => folhaAlimento(null, { nome: busca.trim() }, (novo) => aoEscolher('alimento', novo.id)));
   };
   abrirFolha(`${cab('Adicionar alimento')}
-    <input class="search" type="search" placeholder="Buscar nos meus alimentos" aria-label="Buscar" autofocus>
+    <div class="row" style="margin-bottom:10px"><input class="search" type="search" placeholder="Buscar nos meus alimentos" aria-label="Buscar" autofocus style="margin:0"><button class="btn" data-act="pick-codigo" aria-label="Ler código de barras" title="Código de barras">▥</button></div>
     <div class="chips">${[['recentes', 'Recentes'], ['favoritos', 'Favoritos'], ['todos', 'Todos'], ['receitas', 'Receitas']].map(([k, n]) => `<button class="chip" data-f="${k}">${n}</button>`).join('')}</div>
     <div class="lista"></div>`, (s) => {
     $('.search', s).addEventListener('input', (e) => { busca = e.target.value; desenhar(s); });
+    $('[data-act="pick-codigo"]', s).addEventListener('click', () => folhaCodigo((a) => aoEscolher('alimento', a.id)));
     $$('.chip', s).forEach((c) => c.addEventListener('click', () => { filtro = c.dataset.f; busca = ''; $('.search', s).value = ''; desenhar(s); }));
     desenhar(s);
     setTimeout(() => $('.search', s).focus(), 50);
@@ -487,7 +495,7 @@ function folhaCopiar(idxDestino) {
 // ----- Cadastro / edição de alimento -----
 function folhaAlimento(id, inicial = {}, aoSalvar) {
   const a = id ? D.alimentos.find((x) => x.id === id) : null;
-  const v = Object.assign({ nome: '', marca: '', estado: 'na', refQtd: 100, refUnidade: 'g', kcal: '', prot: '', carb: '', gord: '', medidas: [], favorito: false, obs: '' }, a || {}, inicial);
+  const v = Object.assign({ nome: '', marca: '', estado: 'na', refQtd: 100, refUnidade: 'g', kcal: '', prot: '', carb: '', gord: '', medidas: [], favorito: false, obs: '', codigoBarras: '', fonte: '' }, a || {}, inicial);
   let medidas = v.medidas.map((m) => ({ ...m }));
   const linhaMedida = (m, i) => `<div class="ing"><div class="grow">${esc(m.nome)} = ${fmt(m.equivale, 2)} <span class="un"></span></div><button type="button" class="btn sm ghost danger" data-rm="${i}">remover</button></div>`;
   abrirFolha(`${cab(a ? 'Editar alimento' : 'Novo alimento')}
@@ -497,7 +505,7 @@ function folhaAlimento(id, inicial = {}, aoSalvar) {
         <div class="field"><label>Marca (opcional)</label><input name="marca" value="${esc(v.marca || '')}"></div>
         <div class="field"><label>Estado</label><select name="estado"><option value="na" ${v.estado === 'na' ? 'selected' : ''}>não se aplica</option><option value="cru" ${v.estado === 'cru' ? 'selected' : ''}>cru</option><option value="cozido" ${v.estado === 'cozido' ? 'selected' : ''}>cozido</option></select></div>
       </div>
-      ${a && a.fonte ? `<p class="help" style="margin-top:0">Valores de origem: <b>${esc(a.fonte)}</b>. Se editar, eles passam a ser seus.</p>` : ''}
+      ${(a && a.fonte) || (!a && v.fonte) ? `<p class="help" style="margin-top:0">Valores de origem: <b>${esc(v.fonte)}</b>. Se editar, eles passam a ser seus.</p>` : ''}
       ${v.obs ? `<p class="help" style="margin-top:0;background:var(--warn-soft);padding:8px 10px;border-radius:8px">${esc(v.obs)}</p>` : ''}
       <p class="help" style="margin-top:0">Os valores abaixo valem para a <b>quantidade de referência</b> (ex.: 100 g, 100 ml ou 1 porção). Copie do rótulo.</p>
       <div class="grid2">
@@ -519,6 +527,7 @@ function folhaAlimento(id, inicial = {}, aoSalvar) {
       </div>
       <button type="button" class="btn sm full" data-add-medida>+ Adicionar medida</button>
       <hr class="sep">
+      <div class="field"><label>Código de barras (opcional)</label><input name="codigoBarras" inputmode="numeric" value="${esc(v.codigoBarras || '')}" placeholder="Para reconhecer o produto ao ler o código"></div>
       <label class="check"><input type="checkbox" name="favorito" ${v.favorito ? 'checked' : ''}> Favorito</label>
       <div class="stack" style="margin-top:8px">
         <button class="btn primary full" type="submit">${a ? 'Salvar alterações' : 'Salvar alimento'}</button>
@@ -540,10 +549,12 @@ function folhaAlimento(id, inicial = {}, aoSalvar) {
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       const campos = { nome: form.nome.value.trim(), marca: form.marca.value.trim(), estado: form.estado.value, refQtd: num(form.refQtd.value), refUnidade: form.refUnidade.value,
-        kcal: num(form.kcal.value), prot: num(form.prot.value), carb: num(form.carb.value), gord: num(form.gord.value), medidas, favorito: form.favorito.checked, obs: v.obs || '' };
+        kcal: num(form.kcal.value), prot: num(form.prot.value), carb: num(form.carb.value), gord: num(form.gord.value), medidas, favorito: form.favorito.checked, obs: v.obs || '', codigoBarras: normalizarCodigo(form.codigoBarras.value) };
       if (!campos.nome) { toast('Informe o nome.'); return; }
       if (!(campos.refQtd > 0)) { toast('Quantidade de referência deve ser maior que zero.'); return; }
       for (const k of ['kcal', 'prot', 'carb', 'gord']) if (!(campos[k] >= 0)) { toast(`Valor inválido em ${k}. Use números (vírgula ou ponto).`); return; }
+      if (campos.codigoBarras) { const dono = D.alimentos.find((x) => x !== a && x.codigoBarras === campos.codigoBarras); if (dono && !confirmar(`O código ${campos.codigoBarras} já está em “${dono.nome}”. Manter nos dois?`)) return; }
+      if (!a && v.fonte) { const mudou = ['kcal', 'prot', 'carb', 'gord'].some((k) => v[k] !== '' && v[k] !== campos[k]); campos.fonte = mudou ? v.fonte + ' (editado)' : v.fonte; }
       let salvo;
       if (a) {
         const mudouValor = a.fonte && ['kcal', 'prot', 'carb', 'gord', 'refQtd', 'refUnidade'].some((k) => a[k] !== campos[k]);
@@ -667,6 +678,97 @@ function menuReceita(id) {
   ]);
 }
 
+// ---------- Código de barras ----------
+// Leitor: BarcodeDetector nativo (Chrome Android). Sem ele, só digitação. Consulta: Open Food Facts,
+// base colaborativa; o que vem de lá entra no formulário para conferência, nunca é salvo direto.
+const FONTE_OFF = 'Open Food Facts';
+const temLeitor = () => 'BarcodeDetector' in window && !!navigator.mediaDevices?.getUserMedia;
+function normalizarCodigo(c) { return String(c || '').replace(/\D/g, ''); }
+async function consultarOFF(codigo) {
+  const url = `https://world.openfoodfacts.org/api/v2/product/${codigo}.json?fields=product_name,product_name_pt,brands,quantity,serving_size,nutriments`;
+  let ultimoErro;
+  for (let tentativa = 0; tentativa < 2; tentativa++) {
+    try {
+      const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 8000);
+      const r = await fetch(url, { signal: ctrl.signal, headers: { 'Accept': 'application/json' } }); clearTimeout(t);
+      if (r.status === 404) return { achou: false };
+      if (!r.ok) { ultimoErro = new Error(`HTTP ${r.status}`); continue; }
+      const j = await r.json();
+      if (j.status !== 1 || !j.product) return { achou: false };
+      return { achou: true, produto: j.product };
+    } catch (e) { ultimoErro = e; }
+  }
+  throw ultimoErro || new Error('falha na consulta');
+}
+// Converte o registro do OFF nos campos do formulário. Só por 100 g/ml; kJ vira kcal (÷4,184) se faltar kcal.
+function mapearOFF(p, codigo) {
+  const n = p.nutriments || {};
+  const num100 = (k) => { const v = n[k]; return typeof v === 'number' && isFinite(v) ? v : (typeof v === 'string' && v.trim() !== '' && isFinite(Number(v)) ? Number(v) : ''); };
+  let kcal = num100('energy-kcal_100g');
+  if (kcal === '' && num100('energy-kj_100g') !== '') kcal = Math.round(num100('energy-kj_100g') / 4.184);
+  if (kcal === '' && num100('energy_100g') !== '') kcal = Math.round(num100('energy_100g') / 4.184);
+  const liquido = /\bml\b/i.test(p.quantity || '') && !/\bg\b/i.test(p.quantity || '');
+  const refUnidade = liquido ? 'ml' : 'g';
+  const medidas = [];
+  const m = /([\d.,]+)\s*(g|ml)/i.exec(p.serving_size || '');
+  if (m && m[2].toLowerCase() === refUnidade) { const q = num(m[1]); if (q > 0) medidas.push({ nome: 'porção do rótulo', equivale: q }); }
+  const faltando = ['kcal', 'prot', 'carb', 'gord'].filter((k, i) => [kcal, num100('proteins_100g'), num100('carbohydrates_100g'), num100('fat_100g')][i] === '');
+  return {
+    nome: (p.product_name_pt || p.product_name || '').trim(), marca: (p.brands || '').split(',')[0].trim(), refQtd: 100, refUnidade,
+    kcal, prot: num100('proteins_100g'), carb: num100('carbohydrates_100g'), gord: num100('fat_100g'), medidas,
+    codigoBarras: codigo, fonte: FONTE_OFF,
+    obs: `Dados do ${FONTE_OFF} (base colaborativa): confira com o rótulo antes de salvar.${faltando.length ? ` Faltou no cadastro deles: ${faltando.join(', ')}.` : ''}${p.serving_size ? ` Porção informada: ${p.serving_size}.` : ''}`,
+  };
+}
+// Fluxo: código → alimento já cadastrado (callback direto) → consulta OFF → formulário preenchido → callback ao salvar.
+function folhaCodigo(aoEscolher) {
+  let stream = null, rodando = false;
+  const parar = () => { rodando = false; if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; } };
+  const tratar = async (s, codigoBruto) => {
+    const codigo = normalizarCodigo(codigoBruto);
+    if (codigo.length < 8 || codigo.length > 14) { toast('Código inválido: use 8 a 14 dígitos.'); return; }
+    parar();
+    const existente = D.alimentos.find((a) => a.codigoBarras === codigo);
+    if (existente) { fecharFolha(); toast(`Reconhecido: ${rotuloAlimento(existente)}`); aoEscolher(existente); return; }
+    const status = $('.status', s); const abrirManual = (ini, msg) => { fecharFolha(); if (msg) toast(msg); folhaAlimento(null, ini, aoEscolher); };
+    if (!D.config.consultarOFF) { abrirManual({ codigoBarras: codigo }, 'Consulta desligada em Ajustes. Cadastre pelo rótulo.'); return; }
+    if (navigator.onLine === false) { abrirManual({ codigoBarras: codigo }, 'Sem internet. Cadastre pelo rótulo; o código fica salvo.'); return; }
+    status.textContent = `Consultando ${codigo} no ${FONTE_OFF}…`;
+    try {
+      const r = await consultarOFF(codigo);
+      if (!r.achou) { abrirManual({ codigoBarras: codigo }, `Código ${codigo} não está no ${FONTE_OFF}. Cadastre pelo rótulo.`); return; }
+      abrirManual(mapearOFF(r.produto, codigo));
+    } catch (e) { console.warn(e); abrirManual({ codigoBarras: codigo }, `${FONTE_OFF} não respondeu. Cadastre pelo rótulo; o código fica salvo.`); }
+  };
+  abrirFolha(`${cab('Código de barras')}
+    ${temLeitor() ? `<div class="camera"><video playsinline muted autoplay style="width:100%;border-radius:12px;background:#000;aspect-ratio:4/3;object-fit:cover"></video><p class="help cam-msg">Aponte a câmera para o código de barras.</p></div>`
+      : `<p class="help">Este navegador não tem leitor de código embutido (no Android, use o Chrome). Digite o código abaixo.</p>`}
+    <form class="row" data-form="codigo"><div class="field grow" style="margin:0"><label>Código (EAN)</label><input name="codigo" inputmode="numeric" pattern="[0-9]*" placeholder="7891234567890" autocomplete="off"></div><button class="btn primary" type="submit" style="align-self:flex-end">Buscar</button></form>
+    <p class="help status" aria-live="polite" style="margin-top:10px"></p>
+    <p class="small muted">${D.config.consultarOFF ? `A consulta envia apenas o código ao ${FONTE_OFF}. Pode ser desligada em Ajustes.` : 'Consulta ao Open Food Facts desligada em Ajustes: o código só fica salvo no alimento.'}</p>`, async (s) => {
+    $('form', s).addEventListener('submit', (e) => { e.preventDefault(); tratar(s, $('[name=codigo]', s).value); });
+    const bd = $('.sheet-backdrop'); const obs = new MutationObserver(() => { if (!document.contains(bd)) { parar(); obs.disconnect(); } }); obs.observe($('#sheet-root'), { childList: true });
+    if (!temLeitor()) { setTimeout(() => $('[name=codigo]', s).focus(), 50); return; }
+    const video = $('video', s), msg = $('.cam-msg', s);
+    try {
+      const formatos = (await BarcodeDetector.getSupportedFormats()).filter((f) => ['ean_13', 'ean_8', 'upc_a', 'upc_e'].includes(f));
+      if (!formatos.length) throw new Error('sem formatos EAN');
+      const det = new BarcodeDetector({ formats: formatos });
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } }, audio: false });
+      video.srcObject = stream; await video.play(); rodando = true;
+      const laco = async () => {
+        if (!rodando) return;
+        try { const cods = await det.detect(video); if (cods.length && rodando) { msg.textContent = `Lido: ${cods[0].rawValue}`; tratar(s, cods[0].rawValue); return; } } catch { /* quadro inválido */ }
+        setTimeout(laco, 150);
+      };
+      laco();
+    } catch (e) {
+      console.warn(e); parar(); $('.camera', s).innerHTML = `<p class="help">Não foi possível usar a câmera (${e.name === 'NotAllowedError' ? 'permissão negada' : 'indisponível'}). Digite o código abaixo.</p>`;
+      setTimeout(() => $('[name=codigo]', s).focus(), 50);
+    }
+  });
+}
+
 // ---------- Backup ----------
 function baixar(nome, conteudo, tipo) {
   const blob = new Blob([conteudo], { type: tipo }); const url = URL.createObjectURL(blob);
@@ -767,6 +869,7 @@ document.addEventListener('click', (e) => {
     'nova-refeicao': () => { const n = prompt('Nome da nova refeição:', 'Ceia'); if (n && n.trim()) { obterDia(UI.data).refeicoes.push({ id: uid(), nome: n.trim(), itens: [] }); salvar(); render(); } },
     'filtro-alimentos': () => { UI.filtroAlimentos = el.dataset.f; render(); },
     'novo-alimento': () => folhaAlimento(null),
+    'ler-codigo': () => folhaCodigo((a) => menuAlimento(a.id)),
     'nova-receita': () => folhaReceita(null),
     'abrir-alimento': () => menuAlimento(el.dataset.id),
     'abrir-receita': () => menuReceita(el.dataset.id),
@@ -785,6 +888,7 @@ document.addEventListener('click', (e) => {
 document.addEventListener('change', (e) => {
   const el = e.target.closest('[data-act]'); if (!el || el.closest('#sheet-root')) return;
   if (el.dataset.act === 'data' && el.value) { UI.data = el.value; render(); }
+  if (el.dataset.act === 'toggle-off') { D.config.consultarOFF = el.checked; salvar(); toast(el.checked ? 'Consulta ligada.' : 'Consulta desligada.'); }
   if (el.dataset.act === 'concluir') { const dia = obterDia(UI.data); dia.concluido = el.checked; salvar(); toast(el.checked ? 'Dia marcado como concluído.' : 'Dia reaberto.'); }
   if (el.dataset.act === 'arquivo-json' && el.files[0]) { importarJSON(el.files[0]); el.value = ''; }
 });
