@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Meu Prato</title>
+<meta name="description" content="Acompanhamento alimentar pessoal: calorias e proteínas, simples e rápido.">
+<meta name="theme-color" content="#1f7a5a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Meu Prato">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="demo-banner" class="demo-banner" hidden>Modo demonstração: dados de exemplo, separados dos seus registros reais.</div>
+<main id="app" class="app" aria-live="polite"></main>
+<nav class="tabbar" aria-label="Navegação principal">
+  <button class="tab" data-tab="hoje" aria-label="Hoje"><span class="tab-ico">◉</span><span>Hoje</span></button>
+  <button class="tab" data-tab="alimentos" aria-label="Alimentos"><span class="tab-ico">≡</span><span>Alimentos</span></button>
+  <button class="tab" data-tab="historico" aria-label="Histórico"><span class="tab-ico">▤</span><span>Histórico</span></button>
+  <button class="tab" data-tab="config" aria-label="Configurações"><span class="tab-ico">⚙</span><span>Ajustes</span></button>
+</nav>
+<div id="sheet-root"></div>
+<div id="toast" class="toast" hidden></div>
+<script src="app.js"></script>
+</body>
+</html>
