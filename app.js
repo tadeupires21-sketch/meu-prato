@@ -77,7 +77,7 @@ const MODELOS_BASE = [
 function dadosVazios() {
   return {
     versao: VERSAO_DADOS,
-    config: { metas: { kcal: 2000, prot: 120, carb: null, gord: null }, refeicoesPadrao: [...REFEICOES_PADRAO], consultarOFF: true },
+    config: { metas: { kcal: 2000, prot: 120, carb: null, gord: null }, refeicoesPadrao: [...REFEICOES_PADRAO], consultarOFF: true, metaAgua: 2000, copoAgua: 250 },
     alimentos: [], receitas: [], dias: {}, recentes: []
   };
 }
@@ -109,6 +109,9 @@ function normalizar(obj) {
   obj.config = Object.assign(base.config, obj.config || {});
   obj.config.metas = Object.assign(base.config.metas, obj.config.metas || {});
   if (typeof obj.config.consultarOFF !== 'boolean') obj.config.consultarOFF = true;
+  if (!(obj.config.metaAgua > 0)) obj.config.metaAgua = 2000;
+  if (!(obj.config.copoAgua > 0)) obj.config.copoAgua = 250;
+  for (const dia of Object.values(obj.dias)) if (!Array.isArray(dia.agua)) dia.agua = [];
   if (!Array.isArray(obj.config.refeicoesPadrao) || !obj.config.refeicoesPadrao.length) obj.config.refeicoesPadrao = [...REFEICOES_PADRAO];
   obj.alimentos = obj.alimentos || []; obj.receitas = obj.receitas || []; obj.dias = obj.dias || {}; obj.recentes = obj.recentes || [];
   for (const a of obj.alimentos) { a.medidas = a.medidas || []; a.favorito = !!a.favorito; }
@@ -129,6 +132,7 @@ function validarDados(obj) {
   for (const [data, dia] of Object.entries(obj.dias)) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) return { ok: false, erro: `data inválida: ${data}` };
     if (!Array.isArray(dia.refeicoes)) return { ok: false, erro: `dia ${data} sem lista de refeições` };
+    if (dia.agua !== undefined && (!Array.isArray(dia.agua) || dia.agua.some((a) => !(typeof a.ml === 'number' && a.ml > 0)))) return { ok: false, erro: `registro de água inválido em ${data}` };
     for (const r of dia.refeicoes) {
       if (!Array.isArray(r.itens)) return { ok: false, erro: `refeição sem itens em ${data}` };
       for (const it of r.itens) for (const k of ['kcal', 'prot', 'carb', 'gord', 'qtd']) if (typeof it[k] !== 'number' || !isFinite(it[k])) return { ok: false, erro: `item com ${k} inválido em ${data}` };
@@ -191,10 +195,48 @@ function rotuloAlimento(a) { return a.marca ? `${a.nome} (${a.marca})` : a.nome;
 // ---------- Dias e refeições ----------
 function obterDia(iso, criar = true) {
   let dia = D.dias[iso];
-  if (!dia && criar) { dia = { refeicoes: D.config.refeicoesPadrao.map((n) => ({ id: uid(), nome: n, itens: [] })), concluido: false }; D.dias[iso] = dia; }
+  if (!dia && criar) { dia = { refeicoes: D.config.refeicoesPadrao.map((n) => ({ id: uid(), nome: n, itens: [] })), concluido: false, agua: [] }; D.dias[iso] = dia; }
   return dia;
 }
 function diaTemRegistro(dia) { return !!dia && dia.refeicoes.some((r) => r.itens.length > 0); }
+function aguaDia(dia) { return dia && Array.isArray(dia.agua) ? dia.agua.reduce((t, a) => t + a.ml, 0) : 0; }
+function cartaoAgua(dia) {
+  const total = aguaDia(dia), meta = D.config.metaAgua, copo = D.config.copoAgua;
+  const pct = Math.max(0, Math.min(1, total / meta)); const falta = meta - total;
+  const texto = falta > 0 ? `faltam ${fmt(falta)} ml` : falta === 0 ? 'meta do dia alcançada' : `${fmt(-falta)} ml além da meta`;
+  const nivel = 118 - pct * 96; // copo vai de y=22 (cheio) a y=118 (vazio)
+  const copos = Math.round(total / copo * 10) / 10;
+  return `<section class="card agua">
+    <div class="row" style="gap:16px">
+      <svg class="copo" viewBox="0 0 80 130" width="76" height="124" aria-hidden="true">
+        <defs><clipPath id="copo-clip"><path d="M12 10 L68 10 L62 118 Q61 124 55 124 L25 124 Q19 124 18 118 Z"/></clipPath></defs>
+        <g clip-path="url(#copo-clip)">
+          <rect x="0" y="0" width="80" height="130" fill="var(--agua-fundo)"/>
+          <g class="onda" style="transform:translateY(${nivel}px)">
+            <path fill="var(--agua)" d="M-80 6 Q-70 0 -60 6 T-40 6 T-20 6 T0 6 T20 6 T40 6 T60 6 T80 6 T100 6 T120 6 T140 6 T160 6 V140 H-80 Z"/>
+          </g>
+          <g class="onda onda2" style="transform:translateY(${nivel + 3}px)">
+            <path fill="var(--agua)" opacity=".55" d="M-80 6 Q-70 0 -60 6 T-40 6 T-20 6 T0 6 T20 6 T40 6 T60 6 T80 6 T100 6 T120 6 T140 6 T160 6 V140 H-80 Z"/>
+          </g>
+        </g>
+        <path d="M12 10 L68 10 L62 118 Q61 124 55 124 L25 124 Q19 124 18 118 Z" fill="none" stroke="var(--agua-borda)" stroke-width="3"/>
+        ${[0.25, 0.5, 0.75].map((m) => `<line x1="58" x2="64" y1="${118 - m * 96}" y2="${118 - m * 96}" stroke="var(--agua-borda)" stroke-width="2" opacity=".6"/>`).join('')}
+      </svg>
+      <div class="grow">
+        <div class="label muted small">Água</div>
+        <div class="value" style="font-size:30px;font-weight:700;line-height:1.1">${fmt(total)} <small style="font-size:14px;font-weight:500" class="muted">/ ${fmt(meta)} ml</small></div>
+        <div class="small" style="margin-top:4px">${texto} · ${fmt(copos, 1)} copo${copos === 1 ? '' : 's'} de ${fmt(copo)} ml</div>
+        <div class="bar" style="margin-top:8px"><span style="width:${pct * 100}%;background:var(--agua)"></span></div>
+      </div>
+    </div>
+    <div class="row" style="margin-top:12px;gap:8px">
+      <button class="btn primary grow" data-act="agua-mais" data-ml="${copo}" style="background:var(--agua);border-color:var(--agua);white-space:nowrap">+ Copo</button>
+      <button class="btn" data-act="agua-mais" data-ml="500">+ 500 ml</button>
+      <button class="btn" data-act="agua-outro">Outro</button>
+      <button class="btn icon" data-act="agua-desfazer" aria-label="Desfazer último registro de água" ${dia && dia.agua && dia.agua.length ? '' : 'disabled'}>↶</button>
+    </div>
+  </section>`;
+}
 function totaisDia(dia) { return somar(dia ? dia.refeicoes.flatMap((r) => r.itens) : []); }
 function registrarRecente(tipo, id) {
   D.recentes = [{ tipo, id, em: Date.now() }, ...D.recentes.filter((x) => !(x.tipo === tipo && x.id === id))].slice(0, 30);
@@ -243,6 +285,7 @@ function telaHoje() {
     </div>
     <div class="macros">${macro('Carboidratos', t.carb, m.carb)}${macro('Gorduras', t.gord, m.gord)}</div>
   </section>
+  ${cartaoAgua(dia)}
   ${refeicoes.map((r, i) => {
     const st = somar(r.itens);
     return `<section class="card meal" data-ref="${r.id ?? ''}" data-idx="${i}">
@@ -312,7 +355,7 @@ function telaHistorico() {
   <section class="card">
     ${linhas.map(({ iso, dia, tem, t }) => `<button class="hist-row" style="width:100%;background:none;border:0;border-bottom:1px solid var(--line);text-align:left;color:inherit" data-act="abrir-dia" data-data="${iso}">
       <div class="d">${esc(dataCurta(iso))}</div>
-      ${tem ? `<div class="bars"><div class="small">${fmt(t.kcal)} kcal · <span style="color:var(--prot)">${fmt(t.prot)} g prot</span></div><div class="bar"><span style="width:${Math.min(100, t.kcal / maxK * 100)}%"></span></div><div class="bar p"><span style="width:${m.prot ? Math.min(100, t.prot / m.prot * 100) : 0}%"></span></div></div>` : `<div class="muted small">Sem registros</div>`}
+      ${tem || aguaDia(dia) ? `<div class="bars"><div class="small">${tem ? `${fmt(t.kcal)} kcal · <span style="color:var(--prot)">${fmt(t.prot)} g prot</span>` : '<span class="muted">Sem refeições</span>'}${aguaDia(dia) ? ` · <span style="color:var(--agua)">${fmt(aguaDia(dia))} ml</span>` : ''}</div><div class="bar"><span style="width:${Math.min(100, t.kcal / maxK * 100)}%"></span></div><div class="bar p"><span style="width:${m.prot ? Math.min(100, t.prot / m.prot * 100) : 0}%"></span></div></div>` : `<div class="muted small">Sem registros</div>`}
       <div class="st">${tem ? (dia.concluido ? '<span class="badge">concluído</span>' : '<span class="badge neutral">em aberto</span>') : ''}</div>
     </button>`).join('')}
   </section>`;
@@ -335,6 +378,13 @@ function telaConfig() {
       </div>
       <button class="btn primary full" type="submit">Salvar metas</button>
     </form>
+  </section>
+  <section class="card">
+    <h2>Água</h2>
+    <form data-form="agua"><div class="grid2">
+      <div class="field"><label>Meta diária (ml)</label><input name="meta" inputmode="numeric" value="${fmt(D.config.metaAgua)}" required></div>
+      <div class="field"><label>Tamanho do copo (ml)</label><input name="copo" inputmode="numeric" value="${fmt(D.config.copoAgua)}" required></div>
+    </div><button class="btn full" type="submit">Salvar água</button></form>
   </section>
   <section class="card">
     <h2>Refeições padrão</h2>
@@ -823,6 +873,23 @@ function folhaCodigo(aoEscolher) {
   });
 }
 
+// ---------- Água: quantidade livre ----------
+function folhaAgua() {
+  const dia = obterDia(UI.data);
+  abrirFolha(`${cab('Registrar água')}
+    <div class="field"><label>Quantidade (ml)</label><input name="ml" inputmode="numeric" pattern="[0-9]*" placeholder="Ex.: 350" autofocus></div>
+    <div class="chips">${[150, 200, 300, 350, 600, 1000].map((v) => `<button class="chip" data-v="${v}">${fmt(v)} ml</button>`).join('')}</div>
+    <button class="btn primary full" data-ok>Adicionar</button>
+    ${dia.agua.length ? `<hr class="sep"><h3>Registros de ${esc(rotuloData(UI.data).toLowerCase())}</h3><div class="lista">${dia.agua.map((a) => `<div class="ing"><div class="grow">${fmt(a.ml)} ml <span class="muted small">· ${new Date(a.em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span></div><button type="button" class="btn sm ghost danger" data-rm="${a.id}">remover</button></div>`).join('')}</div>` : ''}`, (s) => {
+    const inp = $('[name=ml]', s);
+    const add = () => { const ml = num(inp.value); if (!(ml > 0)) { toast('Informe uma quantidade em ml maior que zero.'); return; } dia.agua.push({ id: uid(), ml: Math.round(ml), em: new Date().toISOString() }); salvar(); fecharFolha(); render(); };
+    $('[data-ok]', s).addEventListener('click', add); inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') add(); });
+    $$('.chip', s).forEach((c) => c.addEventListener('click', () => { inp.value = c.dataset.v; add(); }));
+    $$('[data-rm]', s).forEach((b) => b.addEventListener('click', () => { dia.agua = dia.agua.filter((a) => a.id !== b.dataset.rm); salvar(); fecharFolha(); render(); }));
+    setTimeout(() => inp.focus(), 50);
+  });
+}
+
 // ---------- Backup ----------
 function baixar(nome, conteudo, tipo) {
   const blob = new Blob([conteudo], { type: tipo }); const url = URL.createObjectURL(blob);
@@ -833,8 +900,11 @@ function exportarJSON() { baixar(`meu-prato-backup-${hojeISO()}${modoDemo() ? '-
 function exportarCSV() {
   const linhas = [['data', 'refeicao', 'alimento', 'tipo', 'quantidade', 'unidade', 'kcal', 'proteina_g', 'carboidrato_g', 'gordura_g', 'dia_concluido']];
   const datas = Object.keys(D.dias).sort();
-  for (const data of datas) for (const r of D.dias[data].refeicoes) for (const it of r.itens)
-    linhas.push([data, r.nome, it.rotulo, it.tipo, it.qtd, it.unidade, it.kcal.toFixed(1), it.prot.toFixed(2), it.carb.toFixed(2), it.gord.toFixed(2), D.dias[data].concluido ? 'sim' : 'nao']);
+  for (const data of datas) {
+    for (const r of D.dias[data].refeicoes) for (const it of r.itens)
+      linhas.push([data, r.nome, it.rotulo, it.tipo, it.qtd, it.unidade, it.kcal.toFixed(1), it.prot.toFixed(2), it.carb.toFixed(2), it.gord.toFixed(2), D.dias[data].concluido ? 'sim' : 'nao']);
+    const ml = aguaDia(D.dias[data]); if (ml) linhas.push([data, 'Água', 'Água', 'agua', ml, 'ml', '0.0', '0.00', '0.00', '0.00', D.dias[data].concluido ? 'sim' : 'nao']);
+  }
   const cel = (v) => { const s = String(v).replace(/\./g, ',' ); return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
   // Números com vírgula decimal e separador ";" para abrir direto no Excel/LibreOffice em pt-BR.
   const csv = '﻿' + linhas.map((l) => l.map((v, i) => (typeof v === 'number' || (i >= 6 && i <= 9)) ? String(v).replace('.', ',') : cel(v)).join(';')).join('\r\n');
@@ -894,8 +964,9 @@ function semearDemo(d) {
   const hoje = hojeISO();
   for (let i = 1; i <= 5; i++) {
     const iso = somarDias(hoje, -i);
-    const dia = { refeicoes: REFEICOES_PADRAO.map((n) => ({ id: uid(), nome: n, itens: [] })), concluido: i !== 2 };
+    const dia = { refeicoes: REFEICOES_PADRAO.map((n) => ({ id: uid(), nome: n, itens: [] })), concluido: i !== 2, agua: [] };
     const add = (ref, a, qtd, unidade) => dia.refeicoes[ref].itens.push({ id: uid(), tipo: 'alimento', refId: a.id, rotulo: a.nome, qtd, unidade, criadoEm: new Date().toISOString(), ...nutrientesAlimentoDe(a, qtd, unidade) });
+    dia.agua = [250, 500, 250, 350].slice(0, 2 + (i % 3)).map((ml) => ({ id: uid(), ml, em: new Date().toISOString() }));
     add(0, pao, 2, 'unidade'); add(0, ovo, 2, 'unidade'); add(1, arroz, 150 + i * 10, 'g'); add(1, feijao, 1, 'concha'); add(1, frango, 150, 'g'); add(2, whey, 1, 'scoop'); add(3, frango, 120, 'g'); add(3, arroz, 100, 'g');
     d.dias[iso] = dia;
   }
@@ -917,6 +988,9 @@ document.addEventListener('click', (e) => {
     'dia-ant': () => { UI.data = somarDias(UI.data, -1); render(); },
     'dia-prox': () => { UI.data = somarDias(UI.data, 1); render(); },
     'ir-hoje': () => { UI.data = hojeISO(); render(); },
+    'agua-mais': () => { const ml = num(el.dataset.ml); const dia = obterDia(UI.data); dia.agua.push({ id: uid(), ml, em: new Date().toISOString() }); salvar(); render(); },
+    'agua-outro': () => folhaAgua(),
+    'agua-desfazer': () => { const dia = obterDia(UI.data); const u = dia.agua.pop(); if (u) { salvar(); render(); toast(`Removidos ${fmt(u.ml)} ml.`); } },
     'adicionar': () => { const idx = Number(el.dataset.idx); obterDia(UI.data); folhaEscolher(idx, (tipo, id) => adicionarItem(idx, tipo, id)); },
     'editar-item': () => folhaItem(Number(el.dataset.idx), el.dataset.item),
     'menu-refeicao': () => { obterDia(UI.data); menuRefeicao(Number(el.dataset.idx)); },
@@ -959,6 +1033,11 @@ document.addEventListener('submit', (e) => {
     if (!(kcal > 0) || !(prot > 0)) { toast('Calorias e proteínas devem ser números maiores que zero.'); return; }
     if ((carb !== null && !(carb >= 0)) || (gord !== null && !(gord >= 0))) { toast('Valor inválido em carboidratos ou gorduras.'); return; }
     D.config.metas = { kcal, prot, carb, gord }; salvar(); toast('Metas salvas.');
+  }
+  if (f.dataset.form === 'agua') {
+    const meta = num(f.meta.value), copo = num(f.copo.value);
+    if (!(meta > 0) || !(copo > 0)) { toast('Meta e copo devem ser números maiores que zero.'); return; }
+    D.config.metaAgua = Math.round(meta); D.config.copoAgua = Math.round(copo); salvar(); toast('Água salva.');
   }
   if (f.dataset.form === 'refeicoes') {
     const lista = f.lista.value.split('\n').map((s) => s.trim()).filter(Boolean);
