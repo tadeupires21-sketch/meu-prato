@@ -23,7 +23,14 @@ dependência, sem servidor de dados. Interface em pt-BR, feita para celular (And
    Toque em calorias, proteínas, carboidratos ou gorduras no resumo para ver **de onde veio** cada nutriente:
    total por refeição com participação e os alimentos que mais contribuíram, com acesso ao registro.
 6. Toque num item registrado para alterar quantidade, duplicar, mover, favoritar ou excluir.
-   O `⋯` da refeição copia uma refeição de outro dia, renomeia ou remove.
+   O `⋯` da refeição oferece **Repetir** a última ocorrência daquela refeição, **Copiar** de outro dia (ambas com
+   prévia editável e valores históricos preservados), **Salvar como combinação**, renomear ou remover.
+   Refeição vazia mostra o atalho “↻ Repetir última”.
+   **Combinações** (ex.: “Meu café”) reúnem consumos independentes e aparecem no seletor, no filtro
+   Combinações; ao usar, a prévia recalcula com os cadastros atuais e deixa desmarcar e ajustar. Não são
+   receitas: receita tem ingredientes e rendimento.
+   No seletor, **☑ Vários** marca vários alimentos de uma vez; “Revisar” abre a prévia com quantidades
+   sugeridas pela última porção. Toda inclusão em lote tem um único “Desfazer”.
 7. **Receitas**: ingredientes + rendimento em porções (+ peso final opcional). Registra-se por porção ou,
    com peso final, por grama.
 8. **Código de barras**: botão ▥ na busca de alimentos ou na aba Alimentos. Lê com a câmera ou aceita o código
@@ -61,6 +68,11 @@ dependência, sem servidor de dados. Interface em pt-BR, feita para celular (And
   Ajustes, com botão para baixá-lo; nada é sobrescrito. Falha ao gravar mostra um banner persistente.
 
 ## Testes
+
+`testes/entrega2.js` cobre a entrega 2: seleção em lote com rascunho preservado ao cadastrar alimento novo,
+prévia com desmarcar e ajustar, desfazer o lote, sem duplicar por toque repetido, combinação salva/aplicada com
+cadastro editado e excluído, repetir última com valores históricos escalados, isolamento entre dias, validação.
+
 
 `testes/recorte1.js` cobre o primeiro recorte da revisão de 29/10: cache do service worker, busca sem acentos,
 adicionar e continuar, desfazer, última porção (inclusive medida removida), detalhe de macros, escape de HTML no

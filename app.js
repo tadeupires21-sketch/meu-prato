@@ -78,7 +78,7 @@ function dadosVazios() {
   return {
     versao: VERSAO_DADOS,
     config: { metas: { kcal: 2000, prot: 120, carb: null, gord: null }, refeicoesPadrao: [...REFEICOES_PADRAO], consultarOFF: true, metaAgua: 2000, copoAgua: 250 },
-    alimentos: [], receitas: [], dias: {}, recentes: [], porcoes: {}
+    alimentos: [], receitas: [], dias: {}, recentes: [], porcoes: {}, combinacoes: []
   };
 }
 function modoDemo() { try { return localStorage.getItem(CHAVE_MODO) === 'demo'; } catch { return false; } }
@@ -132,7 +132,7 @@ function normalizar(obj) {
   if (!(obj.config.copoAgua > 0)) obj.config.copoAgua = 250;
   for (const dia of Object.values(obj.dias)) if (!Array.isArray(dia.agua)) dia.agua = [];
   if (!Array.isArray(obj.config.refeicoesPadrao) || !obj.config.refeicoesPadrao.length) obj.config.refeicoesPadrao = [...REFEICOES_PADRAO];
-  obj.alimentos = obj.alimentos || []; obj.receitas = obj.receitas || []; obj.dias = obj.dias || {}; obj.recentes = obj.recentes || []; obj.porcoes = obj.porcoes || {};
+  obj.alimentos = obj.alimentos || []; obj.receitas = obj.receitas || []; obj.dias = obj.dias || {}; obj.recentes = obj.recentes || []; obj.porcoes = obj.porcoes || {}; obj.combinacoes = obj.combinacoes || [];
   for (const a of obj.alimentos) { a.medidas = a.medidas || []; a.favorito = !!a.favorito; }
   for (const r of obj.receitas) { r.ingredientes = r.ingredientes || []; r.favorito = !!r.favorito; }
   return obj;
@@ -202,6 +202,14 @@ function validarDados(obj) {
     if (dia.agua !== undefined && (!Array.isArray(dia.agua) || dia.agua.some((a) => !ehObj(a) || !(ehNum(a.ml) && a.ml > 0)))) return { ok: false, erro: `registro de água inválido em ${data}` };
   }
   if (obj.recentes !== undefined && (!Array.isArray(obj.recentes) || obj.recentes.some((x) => !ehObj(x)))) return { ok: false, erro: '"recentes" inválido' };
+  if (obj.combinacoes !== undefined) {
+    if (!Array.isArray(obj.combinacoes)) return { ok: false, erro: '"combinacoes" inválido' };
+    for (const c of obj.combinacoes) {
+      if (!ehObj(c) || typeof c.id !== 'string' || typeof c.nome !== 'string' || !c.nome.trim() || !Array.isArray(c.itens) || !c.itens.length) return { ok: false, erro: 'combinação inválida' };
+      for (const it of c.itens) { if (!ehObj(it) || !['alimento', 'receita'].includes(it.tipo) || typeof it.refId !== 'string' || typeof it.rotulo !== 'string' || !(ehNum(it.qtd) && it.qtd > 0) || typeof it.unidade !== 'string') return { ok: false, erro: `item inválido na combinação "${c.nome}"` };
+        for (const k of ['kcal', 'prot', 'carb', 'gord']) if (!ehNumNaoNeg(it[k])) return { ok: false, erro: `item com ${k} inválido na combinação "${c.nome}"` }; }
+    }
+  }
   if (obj.porcoes !== undefined) {
     if (!ehObj(obj.porcoes)) return { ok: false, erro: '"porcoes" inválido' };
     for (const [k, p] of Object.entries(obj.porcoes)) if (!ehObj(p) || !(ehNum(p.qtd) && p.qtd > 0) || typeof p.unidade !== 'string') return { ok: false, erro: `última porção inválida (${k})` };
@@ -248,6 +256,7 @@ function toast(msg, op = {}) {
   if (!op.erro && Date.now() < toastErroAte) return;
   t.textContent = ''; t.append(document.createTextNode(msg));
   if (op.acao) { const b = document.createElement('button'); b.type = 'button'; b.className = 'toast-acao'; b.textContent = op.rotulo || 'Desfazer'; b.addEventListener('click', () => { t.hidden = true; op.acao(); }); t.append(b); }
+  t.classList.toggle('topo', !!$('.sheet-backdrop')); // com folha aberta, não cobrir o botão de confirmar
   t.hidden = false; clearTimeout(toastTimer);
   const dur = op.erro ? 5000 : op.acao ? 5000 : 2600; if (op.erro) toastErroAte = Date.now() + 4000;
   toastTimer = setTimeout(() => { t.hidden = true; }, dur);
@@ -392,7 +401,7 @@ function telaHoje() {
           <div class="grow"><div class="name ellipsis">${esc(it.rotulo)}</div><div class="qty">${fmt(it.qtd, 2)} ${esc(it.unidade)}</div></div>
           <div class="nums"><div>${fmt(it.kcal)} kcal</div><div class="p">${fmt(it.prot, 1)} g prot</div></div>
         </button>`).join('')}
-      <button class="meal-add" data-act="adicionar" data-idx="${i}">+ Adicionar alimento</button>
+      <div class="row" style="gap:0"><button class="meal-add grow" data-act="adicionar" data-idx="${i}">+ Adicionar alimento</button>${!r.itens.length && ultimaRefeicaoAnterior(r.nome, UI.data) ? `<button class="meal-add" style="width:auto;color:var(--muted)" data-act="repetir" data-idx="${i}">↻ Repetir última</button>` : ''}</div>
     </section>`;
   }).join('')}
   <button class="btn full" data-act="nova-refeicao">+ Nova refeição neste dia</button>
@@ -405,10 +414,14 @@ function telaAlimentos() {
   const f = UI.filtroAlimentos; const q = UI.buscaAlimentos.trim();
   let html = `<div class="topbar"><h1 class="title">Alimentos e receitas</h1></div>
   <input class="search" type="search" placeholder="Buscar por nome ou marca" value="${esc(UI.buscaAlimentos)}" data-act="busca-alimentos" aria-label="Buscar">
-  <div class="chips">${[['todos', 'Todos'], ['favoritos', 'Favoritos'], ['receitas', 'Receitas']].map(([k, n]) => `<button class="chip ${f === k ? 'active' : ''}" data-act="filtro-alimentos" data-f="${k}">${n}</button>`).join('')}</div>
+  <div class="chips">${[['todos', 'Todos'], ['favoritos', 'Favoritos'], ['receitas', 'Receitas'], ['combinacoes', 'Combinações']].map(([k, n]) => `<button class="chip ${f === k ? 'active' : ''}" data-act="filtro-alimentos" data-f="${k}">${n}</button>`).join('')}</div>
   <div class="grid3" style="margin-bottom:12px"><button class="btn primary" data-act="novo-alimento">+ Alimento</button><button class="btn" data-act="nova-receita">+ Receita</button><button class="btn" data-act="ler-codigo">▥ Código</button></div>
   <section class="card">`;
   const itens = [];
+  if (f === 'combinacoes') {
+    html += (D.combinacoes.length ? filtrarOrdenar(D.combinacoes, q, (c) => c.nome).map((c) => itemListaCombinacao(c, 'abrir-combinacao')).join('') : '<div class="empty">Nenhuma combinação salva. Na tela Hoje, no menu ⋯ de uma refeição com itens, use “Salvar como combinação”. Uma combinação reúne consumos independentes (editáveis um a um); receita tem ingredientes e rendimento.</div>') + '</section>';
+    return html;
+  }
   if (f !== 'receitas') for (const a of filtrarOrdenar(D.alimentos.filter((a) => f !== 'favoritos' || a.favorito), q, (a) => a.nome, (a) => a.marca)) itens.push(itemListaAlimento(a, 'abrir-alimento'));
   for (const r of filtrarOrdenar(D.receitas.filter((r) => f !== 'favoritos' || r.favorito), q, (r) => r.nome)) itens.push(itemListaReceita(r, 'abrir-receita'));
   html += itens.length ? itens.join('') : `<div class="empty">${D.alimentos.length || D.receitas.length ? 'Nada encontrado com esse filtro.' : 'Nenhum alimento cadastrado ainda. Toque em “+ Alimento” para começar.'}</div>` + (D.alimentos.length ? '' : `<button class="btn full" data-act="importar-base" style="margin-top:8px">Adicionar alimentos comuns (TACO)</button>`);
@@ -526,12 +539,13 @@ function abrirFolha(html, aoMontar) {
   fecharFolha();
   const root = $('#sheet-root');
   root.innerHTML = `<div class="sheet-backdrop"><div class="sheet" role="dialog" aria-modal="true">${html}</div></div>`;
+  $('#toast').classList.add('topo');
   const bd = $('.sheet-backdrop', root);
   bd.addEventListener('click', (e) => { if (e.target === bd) fecharFolha(); });
   $$('[data-fechar]', root).forEach((b) => b.addEventListener('click', fecharFolha));
   if (aoMontar) aoMontar($('.sheet', root));
 }
-function fecharFolha() { $('#sheet-root').innerHTML = ''; }
+function fecharFolha() { $('#sheet-root').innerHTML = ''; $('#toast').classList.remove('topo'); }
 const cab = (titulo) => `<div class="sheet-head"><h2>${esc(titulo)}</h2><button class="btn icon ghost" data-fechar aria-label="Fechar">✕</button></div>`;
 
 // Menu simples de opções
@@ -544,6 +558,12 @@ function menu(titulo, opcoes) {
 // ----- Escolher alimento/receita para uma refeição -----
 function folhaEscolher(idxRefeicao, aoEscolher, resumo = '') {
   let filtro = 'recentes'; let busca = '';
+  const lote = idxRefeicao !== null && idxRefeicao !== undefined; // modo lote só faz sentido ao montar uma refeição
+  const rascunho = (lote && UI.rascunhoLote && UI.rascunhoLote.idx === idxRefeicao && UI.rascunhoLote.data === UI.data) ? UI.rascunhoLote.itens : [];
+  let selecionando = rascunho.length > 0;
+  const chave = (t, id) => `${t}:${id}`;
+  const noRascunho = (t, id) => rascunho.some((x) => chave(x.tipo, x.id) === chave(t, id));
+  const alternar = (t, id) => { const i = rascunho.findIndex((x) => chave(x.tipo, x.id) === chave(t, id)); if (i >= 0) rascunho.splice(i, 1); else rascunho.push({ tipo: t, id }); UI.rascunhoLote = { idx: idxRefeicao, data: UI.data, itens: rascunho }; };
   if (!D.recentes.length) filtro = D.alimentos.some((a) => a.favorito) || D.receitas.some((r) => r.favorito) ? 'favoritos' : 'todos';
   const desenhar = (s) => {
     const q = busca.trim();
@@ -552,21 +572,45 @@ function folhaEscolher(idxRefeicao, aoEscolher, resumo = '') {
     if (filtro === 'recentes') lista = D.recentes.map((x) => x.tipo === 'alimento' ? D.alimentos.find((a) => a.id === x.id) : Object.assign({ _receita: true }, D.receitas.find((r) => r.id === x.id))).filter((x) => x && x.id);
     else if (filtro === 'favoritos') lista = [...D.alimentos.filter((a) => a.favorito), ...D.receitas.filter((r) => r.favorito).map((r) => Object.assign({ _receita: true }, r))];
     else if (filtro === 'receitas') lista = D.receitas.map((r) => Object.assign({ _receita: true }, r));
+    else if (filtro === 'combinacoes') lista = [];
     else lista = filtrarOrdenar([...D.alimentos, ...D.receitas.map((r) => Object.assign({ _receita: true }, r))], q, (x) => x.nome, (x) => x.marca || '');
-    $('.lista', s).innerHTML = (lista.length ? lista.map((x) => x._receita ? itemListaReceita(x, 'pick-receita') : itemListaAlimento(x, 'pick-alimento')).join('')
+    const marca = (t, id) => selecionando ? `<span class="marca ${noRascunho(t, id) ? 'on' : ''}" aria-hidden="true">${noRascunho(t, id) ? '✓' : ''}</span>` : '';
+    const combos = filtro === 'combinacoes' ? (D.combinacoes.length ? D.combinacoes.map((c) => itemListaCombinacao(c, 'pick-combo')).join('') : '<div class="empty">Nenhuma combinação salva. No menu ⋯ de uma refeição com itens, use “Salvar como combinação”.</div>') : '';
+    $('.lista', s).innerHTML = combos + (filtro === 'combinacoes' ? '' : (lista.length ? lista.map((x) => x._receita ? itemListaReceita(x, 'pick-receita', '').replace('<div class="grow">', marca('receita', x.id) + '<div class="grow">') : itemListaAlimento(x, 'pick-alimento', '').replace('<div class="grow">', marca('alimento', x.id) + '<div class="grow">')).join('')
       : `<div class="empty">${filtro === 'recentes' ? 'Nada usado recentemente.' : filtro === 'favoritos' ? 'Nenhum favorito ainda.' : 'Nada encontrado.'}</div>`)
-      + `<button class="list-item" data-act="pick-novo"><div class="grow"><div class="name" style="color:var(--brand)">+ Cadastrar novo alimento${q ? ` “${esc(busca.trim())}”` : ''}</div></div></button>`;
+      + `<button class="list-item" data-act="pick-novo"><div class="grow"><div class="name" style="color:var(--brand)">+ Cadastrar novo alimento${q ? ` “${esc(busca.trim())}”` : ''}</div></div></button>`);
     $$('.chip', s).forEach((c) => c.classList.toggle('active', c.dataset.f === filtro));
-    $$('[data-act="pick-alimento"]', s).forEach((b) => b.addEventListener('click', () => aoEscolher('alimento', b.dataset.id)));
-    $$('[data-act="pick-receita"]', s).forEach((b) => b.addEventListener('click', () => aoEscolher('receita', b.dataset.id)));
-    $('[data-act="pick-novo"]', s).addEventListener('click', () => folhaAlimento(null, { nome: busca.trim() }, (novo) => aoEscolher('alimento', novo.id)));
+    const escolher = (t, id) => { if (selecionando) { alternar(t, id); desenhar(s); } else aoEscolher(t, id); };
+    $$('[data-act="pick-alimento"]', s).forEach((b) => b.addEventListener('click', () => escolher('alimento', b.dataset.id)));
+    $$('[data-act="pick-receita"]', s).forEach((b) => b.addEventListener('click', () => escolher('receita', b.dataset.id)));
+    $$('[data-act="pick-combo"]', s).forEach((b) => b.addEventListener('click', () => { if (lote) menuCombinacao(b.dataset.id, idxRefeicao); else menuCombinacao(b.dataset.id); }));
+    const barra = $('.barra-lote', s);
+    if (barra) { barra.hidden = !selecionando; if (selecionando) { $('[data-revisar]', barra).textContent = rascunho.length ? `Revisar ${rascunho.length} ${rascunho.length === 1 ? 'item' : 'itens'}` : 'Toque nos itens para marcar'; $('[data-revisar]', barra).disabled = !rascunho.length; } $('[data-lote]', s).classList.toggle('active', selecionando); }
+    $('[data-act="pick-novo"]', s).addEventListener('click', () => folhaAlimento(null, { nome: busca.trim() }, (novo) => { if (selecionando) { alternar('alimento', novo.id); abrirSeletor(idxRefeicao); } else aoEscolher('alimento', novo.id); }));
   };
   abrirFolha(`${cab('Adicionar alimento')}
     ${resumo ? `<p class="help resumo-refeicao" style="margin-top:-6px">${esc(resumo)}</p>` : ''}
     <div class="row" style="margin-bottom:10px"><input class="search" type="search" placeholder="Buscar nos meus alimentos" aria-label="Buscar" autofocus style="margin:0"><button class="btn" data-act="pick-codigo" aria-label="Ler código de barras" title="Código de barras">▥</button></div>
-    <div class="chips">${[['recentes', 'Recentes'], ['favoritos', 'Favoritos'], ['todos', 'Todos'], ['receitas', 'Receitas']].map(([k, n]) => `<button class="chip" data-f="${k}">${n}</button>`).join('')}</div>
-    <div class="lista"></div>`, (s) => {
+    <div class="chips">${[['recentes', 'Recentes'], ['favoritos', 'Favoritos'], ['todos', 'Todos'], ['receitas', 'Receitas'], ['combinacoes', 'Combinações']].map(([k, n]) => `<button class="chip" data-f="${k}">${n}</button>`).join('')}${lote ? '<button class="chip" data-lote title="Selecionar vários">☑ Vários</button>' : ''}</div>
+    <div class="lista"></div>
+    ${lote ? `<div class="barra-lote row" hidden style="position:sticky;bottom:-16px;background:var(--card);padding:10px 0 4px;margin-top:8px;border-top:1px solid var(--line)"><button class="btn sm ghost" data-cancelar-lote>Cancelar</button><button class="btn primary grow" data-revisar>Revisar</button></div>` : ''}`, (s) => {
     $('.search', s).addEventListener('input', (e) => { busca = e.target.value; desenhar(s); });
+    if (lote) {
+      $('[data-lote]', s).addEventListener('click', () => { selecionando = !selecionando; if (!selecionando) { rascunho.length = 0; UI.rascunhoLote = null; } desenhar(s); });
+      $('[data-cancelar-lote]', s).addEventListener('click', () => { selecionando = false; rascunho.length = 0; UI.rascunhoLote = null; desenhar(s); });
+      $('[data-revisar]', s).addEventListener('click', () => {
+        const linhas = rascunho.map(({ tipo, id }) => {
+          const ref = tipo === 'alimento' ? D.alimentos.find((a) => a.id === id) : D.receitas.find((r) => r.id === id); if (!ref) return null;
+          const un = tipo === 'alimento' ? unidadesAlimento(ref) : unidadesReceita(ref); const u = ultimaPorcao(tipo, id);
+          const unidade = u && un.some((x) => x.nome === u.unidade) ? u.unidade : un[0].nome; const qtd = u && unidade === u.unidade ? u.qtd : (tipo === 'alimento' ? ref.refQtd : 1);
+          const n = tipo === 'alimento' ? nutrientesAlimento(ref, qtd, unidade) : nutrientesReceita(ref, qtd, unidade);
+          return { tipo, refId: id, rotulo: tipo === 'alimento' ? rotuloAlimento(ref) : ref.nome, qtd, unidade, ...n, historico: false };
+        }).filter(Boolean);
+        const ref = obterDia(UI.data).refeicoes[idxRefeicao];
+        folhaRevisar({ titulo: 'Revisar seleção', descricao: 'Quantidades sugeridas pela última porção usada ou pela referência do cadastro.', linhas, destino: `${ref.nome} de ${rotuloData(UI.data).toLowerCase()}`,
+          aoConfirmar: (itens) => { UI.rascunhoLote = null; inserirLote(idxRefeicao, itens, { lote: true }); } });
+      });
+    }
     $('[data-act="pick-codigo"]', s).addEventListener('click', () => folhaCodigo((a) => aoEscolher('alimento', a.id)));
     $$('.chip', s).forEach((c) => c.addEventListener('click', () => { filtro = c.dataset.f; busca = ''; $('.search', s).value = ''; desenhar(s); }));
     desenhar(s);
@@ -652,6 +696,104 @@ function abrirSeletor(idxRefeicao) {
   folhaEscolher(idxRefeicao, (tipo, id) => adicionarItem(idxRefeicao, tipo, id), `${ref.nome} · ${rotuloData(UI.data).toLowerCase()} · ${ref.itens.length} ${ref.itens.length === 1 ? 'item' : 'itens'} · ${fmt(t.kcal)} kcal`);
 }
 
+// ----- Revisão de vários itens antes de registrar (lote, combinação, cópia) -----
+// linhas: [{ tipo, refId, rotulo, qtd, unidade, kcal, prot, carb, gord, historico }]
+//  - historico=true: valores do registro antigo, escalados pela quantidade (nunca recalculados do cadastro).
+//  - senão: recalcula do cadastro atual; se o cadastro sumiu, usa o snapshot da linha escalado e avisa.
+function calcularLinha(l, q) {
+  if (!l.historico) {
+    const ref = l.tipo === 'alimento' ? D.alimentos.find((a) => a.id === l.refId) : D.receitas.find((r) => r.id === l.refId);
+    if (ref) { try { return { ...(l.tipo === 'alimento' ? nutrientesAlimento(ref, q, l.unidade) : nutrientesReceita(ref, q, l.unidade)), rotulo: l.tipo === 'alimento' ? rotuloAlimento(ref) : ref.nome, fonte: 'cadastro' }; } catch { /* medida sumiu: cai no snapshot */ } }
+  }
+  const f = q / l.qtd; return { kcal: l.kcal * f, prot: l.prot * f, carb: l.carb * f, gord: l.gord * f, rotulo: l.rotulo, fonte: l.historico ? 'historico' : 'snapshot' };
+}
+function folhaRevisar({ titulo, descricao, linhas, destino, aoConfirmar, botao = 'Adicionar' }) {
+  const estado = linhas.map((l) => ({ l, q: l.qtd, sel: true }));
+  const desenhar = (s) => {
+    let tot = { kcal: 0, prot: 0, carb: 0, gord: 0 }; let nSel = 0; let avisoSnapshot = false;
+    const html = estado.map((e, i) => {
+      const c = calcularLinha(e.l, e.q > 0 ? e.q : e.l.qtd);
+      if (e.sel && e.q > 0) { nSel++; tot = somar([tot, c]); }
+      if (c.fonte === 'snapshot') avisoSnapshot = true;
+      return `<div class="ing" style="gap:6px;opacity:${e.sel ? 1 : .5}">
+        <input type="checkbox" data-sel="${i}" ${e.sel ? 'checked' : ''} aria-label="Incluir ${esc(c.rotulo)}" style="width:22px;height:22px;flex:none">
+        <div class="grow"><div class="ellipsis" style="font-weight:500">${esc(c.rotulo)}${c.fonte === 'snapshot' ? ' <span class="badge neutral">cadastro excluído</span>' : ''}</div><div class="small muted">${fmt(c.kcal)} kcal · ${fmt(c.prot, 1)} g prot</div></div>
+        <input data-q="${i}" inputmode="decimal" value="${fmt(e.q, 3)}" aria-label="Quantidade" style="width:64px;min-height:40px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);text-align:right">
+        <span class="small muted" style="width:58px">${esc(e.l.unidade)}</span></div>`;
+    }).join('');
+    $('.linhas', s).innerHTML = html;
+    $('.total', s).innerHTML = `<div class="preview" style="margin:10px 0 0"><div><b>${fmt(tot.kcal)}</b><span>kcal</span></div><div><b>${fmt(tot.prot, 1)}</b><span>g prot</span></div><div><b>${fmt(tot.carb, 1)}</b><span>g carb</span></div><div><b>${fmt(tot.gord, 1)}</b><span>g gord</span></div></div>
+      ${avisoSnapshot ? '<p class="help">Itens com cadastro excluído usam os valores guardados na combinação.</p>' : ''}`;
+    const ok = $('[data-ok]', s); ok.disabled = nSel === 0; ok.textContent = nSel ? `${botao} ${nSel} ${nSel === 1 ? 'item' : 'itens'} em ${destino}` : 'Nenhum item selecionado';
+    $$('[data-sel]', s).forEach((c) => c.addEventListener('change', () => { estado[Number(c.dataset.sel)].sel = c.checked; desenhar(s); }));
+    $$('[data-q]', s).forEach((inp) => inp.addEventListener('change', () => { const v = num(inp.value); estado[Number(inp.dataset.q)].q = v > 0 ? v : estado[Number(inp.dataset.q)].l.qtd; desenhar(s); }));
+  };
+  abrirFolha(`${cab(titulo)}${descricao ? `<p class="help" style="margin-top:-6px">${esc(descricao)}</p>` : ''}
+    <div class="row between small muted" style="margin-bottom:4px"><span>Desmarque o que não comeu; ajuste quantidades.</span><button type="button" class="btn sm ghost" data-todos>Marcar todos</button></div>
+    <div class="linhas"></div><div class="total"></div>
+    <button class="btn primary full" data-ok style="margin-top:12px">Adicionar</button>`, (s) => {
+    $('[data-todos]', s).addEventListener('click', () => { const todos = estado.every((e) => e.sel); estado.forEach((e) => { e.sel = !todos; }); desenhar(s); });
+    let enviado = false;
+    $('[data-ok]', s).addEventListener('click', () => {
+      if (enviado) return; enviado = true;
+      const escolhidas = estado.filter((e) => e.sel && e.q > 0).map((e) => { const c = calcularLinha(e.l, e.q); return { tipo: e.l.tipo, refId: e.l.refId, rotulo: c.rotulo, qtd: e.q, unidade: e.l.unidade, kcal: c.kcal, prot: c.prot, carb: c.carb, gord: c.gord }; });
+      fecharFolha(); aoConfirmar(escolhidas);
+    });
+    desenhar(s);
+  });
+}
+// Insere várias linhas numa refeição, com um único "Desfazer" para o lote inteiro.
+function inserirLote(idxRefeicao, itens, origem) {
+  const dia = obterDia(UI.data); const ref = dia.refeicoes[idxRefeicao]; if (!ref || !itens.length) return;
+  const novos = itens.map((it) => ({ id: uid(), criadoEm: new Date().toISOString(), origem, ...it }));
+  ref.itens.push(...novos);
+  for (const it of itens) { registrarRecente(it.tipo, it.refId); lembrarPorcao(it.tipo, it.refId, it.qtd, it.unidade); }
+  const ok = salvar(); render();
+  const ids = new Set(novos.map((n) => n.id)); const t = somar(novos);
+  if (ok) toast(`${novos.length} ${novos.length === 1 ? 'item' : 'itens'} em ${ref.nome}: ${fmt(t.kcal)} kcal.`, { rotulo: 'Desfazer', acao: () => { ref.itens = ref.itens.filter((x) => !ids.has(x.id)); salvar(); render(); toast('Inclusão desfeita.'); } });
+}
+
+// ----- Combinações (conjuntos de consumos independentes; não são receitas) -----
+function linhasDeItens(itens, historico) { return itens.map((it) => ({ tipo: it.tipo, refId: it.refId, rotulo: it.rotulo, qtd: it.qtd, unidade: it.unidade, kcal: it.kcal, prot: it.prot, carb: it.carb, gord: it.gord, historico })); }
+function salvarCombinacao(itens, nomeSugerido) {
+  if (!itens.length) { toast('A refeição está vazia.'); return; }
+  const nome = prompt('Nome da combinação (ex.: Meu café da manhã):', nomeSugerido || ''); if (!nome || !nome.trim()) return;
+  if (D.combinacoes.some((c) => c.nome.toLowerCase() === nome.trim().toLowerCase()) && !confirmar(`Já existe “${nome.trim()}”. Salvar outra com o mesmo nome?`)) return;
+  D.combinacoes.push({ id: uid(), nome: nome.trim(), itens: linhasDeItens(itens, false).map(({ historico, ...r }) => r), criadoEm: new Date().toISOString() });
+  D.combinacoes.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  if (salvar()) toast(`Combinação “${nome.trim()}” salva. Ela aparece no seletor, em Combinações.`);
+}
+function aplicarCombinacao(idxRefeicao, comboId) {
+  const c = D.combinacoes.find((x) => x.id === comboId); if (!c) return; const ref = obterDia(UI.data).refeicoes[idxRefeicao];
+  folhaRevisar({ titulo: c.nome, descricao: 'Composição calculada com os cadastros atuais.', linhas: linhasDeItens(c.itens, false), destino: `${ref.nome} de ${rotuloData(UI.data).toLowerCase()}`,
+    aoConfirmar: (itens) => inserirLote(idxRefeicao, itens, { combinacao: c.id }) });
+}
+function menuCombinacao(id, idxRefeicao = null) {
+  const c = D.combinacoes.find((x) => x.id === id); if (!c) return;
+  const ops = [];
+  if (idxRefeicao !== null) ops.push({ rotulo: 'Usar nesta refeição', acao: () => aplicarCombinacao(idxRefeicao, id) });
+  else ops.push({ rotulo: 'Registrar em uma refeição de ' + rotuloData(UI.data).toLowerCase(), acao: () => menu('Em qual refeição?', obterDia(UI.data).refeicoes.map((r, i) => ({ rotulo: r.nome, acao: () => aplicarCombinacao(i, id) }))) });
+  ops.push({ rotulo: 'Renomear', acao: () => { const n = prompt('Novo nome:', c.nome); if (n && n.trim()) { c.nome = n.trim(); salvar(); render(); } } });
+  ops.push({ rotulo: 'Excluir combinação', perigo: true, acao: () => { if (!confirmar(`Excluir “${c.nome}”? Os registros já feitos não mudam.`)) return; D.combinacoes = D.combinacoes.filter((x) => x !== c); salvar(); render(); } });
+  menu(`${c.nome} · ${c.itens.length} itens`, ops);
+}
+function itemListaCombinacao(c, act) {
+  const t = somar(c.itens.map((it) => calcularLinha({ ...it, historico: false }, it.qtd)));
+  return `<button class="list-item" data-act="${act}" data-id="${c.id}"><div class="grow"><div class="name">${esc(c.nome)} <span class="badge">combinação</span></div><div class="meta">${esc(c.itens.map((i) => i.rotulo).join(', '))} · ${fmt(t.kcal)} kcal · ${fmt(t.prot, 1)} g prot</div></div><span class="muted">›</span></button>`;
+}
+// Última ocorrência anterior de uma refeição com o mesmo nome e itens.
+function ultimaRefeicaoAnterior(nome, antesDe) {
+  const datas = Object.keys(D.dias).filter((d) => d < antesDe).sort().reverse();
+  for (const d of datas) { const r = D.dias[d].refeicoes.find((x) => x.nome === nome && x.itens.length); if (r) return { data: d, refeicao: r }; }
+  return null;
+}
+function repetirUltima(idxRefeicao) {
+  const ref = obterDia(UI.data).refeicoes[idxRefeicao]; const u = ultimaRefeicaoAnterior(ref.nome, UI.data);
+  if (!u) { toast(`Nenhum ${ref.nome} anterior com registros.`); return; }
+  folhaRevisar({ titulo: `Repetir ${ref.nome} de ${rotuloData(u.data).toLowerCase()}`, descricao: `Origem: ${dataCurta(u.data)}. Valores preservados do registro original.`, linhas: linhasDeItens(u.refeicao.itens, true), destino: `${ref.nome} de ${rotuloData(UI.data).toLowerCase()}`,
+    aoConfirmar: (itens) => inserirLote(idxRefeicao, itens, { copiaDe: u.data }) });
+}
+
 // ----- Detalhe do dia: de onde vem cada nutriente -----
 const NUTRIENTES = { kcal: { nome: 'Calorias', un: 'kcal', dec: 0 }, prot: { nome: 'Proteínas', un: 'g', dec: 1 }, carb: { nome: 'Carboidratos', un: 'g', dec: 1 }, gord: { nome: 'Gorduras', un: 'g', dec: 1 } };
 function folhaDetalheDia(n0 = 'kcal') {
@@ -715,8 +857,11 @@ function folhaQuantidadeOrfa(it) {
 // ----- Menu da refeição -----
 function menuRefeicao(idx) {
   const dia = obterDia(UI.data); const ref = dia.refeicoes[idx];
+  const ant = ultimaRefeicaoAnterior(ref.nome, UI.data);
   menu(ref.nome, [
+    ...(ant ? [{ rotulo: `Repetir ${ref.nome} de ${rotuloData(ant.data).toLowerCase()} (${ant.refeicao.itens.length} itens)`, acao: () => repetirUltima(idx) }] : []),
     { rotulo: 'Copiar refeição de outro dia', acao: () => folhaCopiar(idx) },
+    ...(ref.itens.length ? [{ rotulo: 'Salvar como combinação', acao: () => salvarCombinacao(ref.itens, `Meu ${ref.nome.toLowerCase()}`) }] : []),
     { rotulo: 'Renomear refeição', acao: () => { const n = prompt('Novo nome da refeição:', ref.nome); if (n && n.trim()) { ref.nome = n.trim(); salvar(); render(); } } },
     { rotulo: 'Limpar itens desta refeição', perigo: true, acao: () => { if (!ref.itens.length) return; if (confirmar(`Excluir os ${ref.itens.length} itens de ${ref.nome}?`)) { ref.itens = []; salvar(); render(); } } },
     { rotulo: 'Remover refeição do dia', perigo: true, acao: () => { if (ref.itens.length && !confirmar(`A refeição tem ${ref.itens.length} itens. Remover mesmo assim?`)) return; dia.refeicoes.splice(idx, 1); salvar(); render(); } },
@@ -730,8 +875,8 @@ function folhaCopiar(idxDestino) {
     lista.innerHTML = dia.refeicoes.filter((r) => r.itens.length).map((r, i) => { const t = somar(r.itens); return `<button class="list-item" data-i="${dia.refeicoes.indexOf(r)}"><div class="grow"><div class="name">${esc(r.nome)}</div><div class="meta">${esc(r.itens.map((x) => x.rotulo).join(', '))} · ${fmt(t.kcal)} kcal</div></div><span class="muted">copiar ›</span></button>`; }).join('');
     $$('.list-item', lista).forEach((b) => b.addEventListener('click', () => {
       const origem = dia.refeicoes[Number(b.dataset.i)]; const destino = obterDia(UI.data).refeicoes[idxDestino];
-      for (const it of origem.itens) destino.itens.push({ ...it, id: uid(), criadoEm: new Date().toISOString() });
-      salvar(); render(); fecharFolha(); toast(`${origem.itens.length} itens copiados para ${destino.nome}.`);
+      folhaRevisar({ titulo: `Copiar ${origem.nome} de ${dataCurta(data)}`, descricao: 'Valores preservados do registro original; quantidade alterada é escalada proporcionalmente.', linhas: linhasDeItens(origem.itens, true), destino: `${destino.nome} de ${rotuloData(UI.data).toLowerCase()}`, botao: 'Copiar',
+        aoConfirmar: (itens) => inserirLote(idxDestino, itens, { copiaDe: data }) });
     }));
   };
   abrirFolha(`${cab('Copiar refeição de outro dia')}<div class="field"><label>Data de origem</label><input type="date" value="${data}" max="${hojeISO()}"></div><div class="lista"></div>`, (s) => {
@@ -1158,6 +1303,8 @@ document.addEventListener('click', (e) => {
     'editar-item': () => folhaItem(Number(el.dataset.idx), el.dataset.item),
     'detalhe': () => folhaDetalheDia(el.dataset.n),
     'menu-refeicao': () => { obterDia(UI.data); menuRefeicao(Number(el.dataset.idx)); },
+    'repetir': () => { obterDia(UI.data); repetirUltima(Number(el.dataset.idx)); },
+    'abrir-combinacao': () => menuCombinacao(el.dataset.id),
     'nova-refeicao': () => { const n = prompt('Nome da nova refeição:', 'Ceia'); if (n && n.trim()) { obterDia(UI.data).refeicoes.push({ id: uid(), nome: n.trim(), itens: [] }); salvar(); render(); } },
     'filtro-alimentos': () => { UI.filtroAlimentos = el.dataset.f; render(); },
     'novo-alimento': () => folhaAlimento(null),

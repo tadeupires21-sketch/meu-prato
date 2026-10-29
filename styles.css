@@ -131,3 +131,7 @@ hr.sep { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
 .macro-btn { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; }
 .macros { flex-wrap: wrap; align-items: center; }
 .chips.atalhos { margin: 0 0 10px; }
+
+.marca { width: 24px; height: 24px; border-radius: 6px; border: 2px solid var(--line); flex: none; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; color: var(--brand-ink); margin-right: 4px; }
+.marca.on { background: var(--brand); border-color: var(--brand); }
+.toast.topo { bottom: auto; top: calc(12px + env(safe-area-inset-top)); }

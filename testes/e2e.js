@@ -96,6 +96,7 @@ const URL = 'http://127.0.0.1:8765/index.html';
   await p.click('[data-act=menu-refeicao][data-idx="1"]'); await p.click('.sheet .menu button:has-text("Copiar refeição")');
   await p.fill('.sheet input[type=date]', hoje); await p.dispatchEvent('.sheet input[type=date]', 'change');
   await p.waitForSelector('.sheet .lista .list-item'); await p.click('.sheet .lista .list-item >> nth=0');
+  await p.waitForSelector('.sheet .linhas .ing'); await p.click('.sheet [data-ok]'); // prévia editável antes de copiar
   await p.waitForSelector('.entry'); assert.equal(await p.locator('.entry').count(), 1); assert.equal(await p.locator('.meal[data-idx="1"] .entry').count(), 1); // copiou o café de hoje (1 item) para o almoço de ontem
   console.log('ontem após copiar:', await txt('.meal[data-idx="1"] .meal-sub'));
   await p.screenshot({ path: SHOT + '/05-ontem.png', fullPage: true });
