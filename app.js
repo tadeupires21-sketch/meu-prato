@@ -586,7 +586,7 @@ function folhaEscolher(idxRefeicao, aoEscolher, resumo = '') {
     $$('[data-act="pick-combo"]', s).forEach((b) => b.addEventListener('click', () => { if (lote) menuCombinacao(b.dataset.id, idxRefeicao); else menuCombinacao(b.dataset.id); }));
     const barra = $('.barra-lote', s);
     if (barra) { barra.hidden = !selecionando; if (selecionando) { $('[data-revisar]', barra).textContent = rascunho.length ? `Revisar ${rascunho.length} ${rascunho.length === 1 ? 'item' : 'itens'}` : 'Toque nos itens para marcar'; $('[data-revisar]', barra).disabled = !rascunho.length; } $('[data-lote]', s).classList.toggle('active', selecionando); }
-    $('[data-act="pick-novo"]', s).addEventListener('click', () => folhaAlimento(null, { nome: busca.trim() }, (novo) => { if (selecionando) { alternar('alimento', novo.id); abrirSeletor(idxRefeicao); } else aoEscolher('alimento', novo.id); }));
+    $('[data-act="pick-novo"]', s)?.addEventListener('click', () => folhaAlimento(null, { nome: busca.trim() }, (novo) => { if (selecionando) { alternar('alimento', novo.id); abrirSeletor(idxRefeicao); } else aoEscolher('alimento', novo.id); }));
   };
   abrirFolha(`${cab('Adicionar alimento')}
     ${resumo ? `<p class="help resumo-refeicao" style="margin-top:-6px">${esc(resumo)}</p>` : ''}

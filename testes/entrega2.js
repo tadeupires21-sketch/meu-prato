@@ -1,7 +1,7 @@
 const { chromium } = require('playwright'); const assert = require('assert');
 (async () => {
   const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
-  const erros = []; p.on('pageerror', (e) => erros.push(e.message)); const prompts = []; p.on('dialog', (d) => { if (d.type() === 'prompt') { prompts.push(d.message()); d.accept('Meu café'); } else d.accept(); });
+  const erros = []; p.on('pageerror', (e) => { erros.push(e.message); console.log('PAGEERROR', e.stack.split('\n').slice(0, 3).join(' <- ')); }); const prompts = []; p.on('dialog', (d) => { if (d.type() === 'prompt') { prompts.push(d.message()); d.accept('Meu café'); } else d.accept(); });
   const txt = async (sel) => (await p.locator(sel).first().innerText()).replace(/\s+/g, ' ').trim();
   const SHOT = '/tmp/claude-0/-home-user/31289882-dc9d-5eca-88d1-67be19cd3d3b/scratchpad/';
   await p.goto('http://127.0.0.1:8765/index.html'); await p.click('.tab[data-tab=config]'); await p.click('[data-act=importar-base]'); await p.waitForSelector('.list-item'); await p.click('.tab[data-tab=hoje]');
@@ -38,7 +38,7 @@ const { chromium } = require('playwright'); const assert = require('assert');
   await p.click('[data-act=adicionar][data-idx="2"]'); await p.click('.sheet .chip[data-f=combinacoes]'); await p.click('.sheet [data-act=pick-combo]'); await p.click('.sheet .menu button:has-text("Usar nesta refeição")'); await p.waitForSelector('.sheet .linhas .ing');
   console.log('cadastro excluído:', await txt('.sheet .linhas .ing >> nth=0')); assert((await txt('.sheet .linhas')).includes('cadastro excluído')); await p.keyboard.press('Escape');
   // 3. repetir última: ontem vazio → hoje tem almoço → em "amanhã" o atalho aparece e preserva valores
-  await p.click('[data-act=dia-prox]'); assert.equal(await p.locator('.meal[data-idx="1"] .entry').count(), 0);
+  await p.click('[data-act=dia-prox]'); console.log('amanhã:', await txt('h1'), '| datas com registro:', await p.evaluate(() => Object.entries(MeuPrato.dados().dias).map(([d, x]) => d + ':' + x.refeicoes.map(r => r.itens.length).join('/')).join(' ')), '| itens almoço:', await p.locator('.meal[data-idx="1"] .entry').count()); assert.equal(await p.locator('.meal[data-idx="1"] .entry').count(), 0);
   console.log('atalho repetir visível:', await p.locator('[data-act=repetir][data-idx="1"]').count());
   await p.click('[data-act=repetir][data-idx="1"]'); await p.waitForSelector('.sheet .linhas .ing'); console.log('repetir título:', await txt('.sheet h2'), '|', await txt('.sheet .linhas .ing >> nth=0'));
   assert((await txt('.sheet .linhas .ing >> nth=0')).includes('256 kcal')); // valor histórico, não 2.000
@@ -49,6 +49,6 @@ const { chromium } = require('playwright'); const assert = require('assert');
   // 4. combinações na aba Alimentos: renomear e excluir; backup valida
   await p.click('.tab[data-tab=alimentos]'); await p.click('[data-act=filtro-alimentos][data-f=combinacoes]'); console.log('aba combos:', await txt('.list-item .name'));
   const v = await p.evaluate(() => [MeuPrato.validar(JSON.parse(localStorage.getItem('meuprato.v1'))).ok, MeuPrato.validar({ versao: 1, alimentos: [], receitas: [], dias: {}, combinacoes: [{ id: 'c', nome: 'x', itens: [] }] }).erro]); console.log('validação:', v); assert(v[0] && v[1]);
-  await p.click('[data-act=abrir-combinacao]'); await p.click('.sheet .menu button:has-text("Excluir")'); await p.waitForTimeout(100); assert.equal(await p.evaluate(() => MeuPrato.dados().combinacoes.length), 0);
+  console.log('combos antes:', await p.evaluate(() => MeuPrato.dados().combinacoes.map(c => c.nome))); await p.click('[data-act=abrir-combinacao]'); console.log('menu:', await txt('.sheet .menu')); await p.click('.sheet .menu button:has-text("Excluir")'); await p.waitForTimeout(100); console.log('combos depois:', await p.evaluate(() => MeuPrato.dados().combinacoes.map(c => c.nome))); assert.equal(await p.evaluate(() => MeuPrato.dados().combinacoes.length), 0);
   console.log('erros:', erros); assert.equal(erros.length, 0); await b.close(); console.log('OK');
 })().catch((e) => { console.error('FALHA', e); process.exit(1); });
