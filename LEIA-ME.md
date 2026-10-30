@@ -58,8 +58,9 @@ dependência, sem servidor de dados. Interface em pt-BR, feita para celular (And
 
 - Dados ficam só neste aparelho e navegador: limpar dados do site, trocar de celular ou desinstalar apaga
   tudo. Exporte o backup com frequência.
-- Única lista embutida: 46 alimentos comuns (ovos, arroz, feijões, lentilha, carnes, frango, peixes, atum,
-  pães, leite, iogurtes, queijos, frutas, legumes, raízes, aveia, cuscuz, azeite) com valores por 100 g copiados da TACO 4ª ed. (NEPA/Unicamp),
+- Única lista embutida: 50 alimentos comuns (ovos, arroz, feijões, lentilha, carnes, frango, peixes, atum,
+  pães, leite, iogurtes, queijos, frutas, legumes cozidos, raízes, aveia, cuscuz, azeite; tilápia crua vem da
+  TBCA/USP e está marcada assim) com valores por 100 g copiados da TACO 4ª ed. (NEPA/Unicamp),
   opcionais, marcados com a fonte e editáveis. Medidas por unidade (ovo 50 g, banana 65 g, fatia de pão
   25 g, colher de aveia 15 g) são médias aproximadas de tabelas de medidas caseiras e vêm com aviso para
   pesar e ajustar; maçã e batata-doce não têm unidade sugerida. Whey é só um modelo: valores vêm do rótulo.

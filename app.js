@@ -81,6 +81,10 @@ const ALIMENTOS_BASE = [
   { nome: 'Biscoito salgado cream cracker', estado: 'na', kcal: 432, prot: 10.1, carb: 68.7, gord: 14.4, obs: 'Média TACO; o rótulo do pacote traz peso por unidade e valores da marca.' },
   { nome: 'Queijo prato', estado: 'na', kcal: 360, prot: 22.7, carb: 1.9, gord: 29.1 },
   { nome: 'Leite de vaca integral em pó', estado: 'na', kcal: 497, prot: 25.4, carb: 39.2, gord: 26.9, obs: 'Rótulo da marca traz o peso da colher/medida.' },
+  { nome: 'Brócolis, cozido', estado: 'cozido', kcal: 25, prot: 2.1, carb: 4.4, gord: 0.5, fibra: 3.4 },
+  { nome: 'Cenoura, cozida', estado: 'cozido', kcal: 30, prot: 0.8, carb: 6.7, gord: 0.2 },
+  { nome: 'Abobrinha italiana, cozida', estado: 'cozido', kcal: 15, prot: 1.1, carb: 3.0, gord: 0.2, fibra: 1.6 },
+  { nome: 'Tilápia, filé, cru', estado: 'cru', kcal: 93, prot: 18.1, carb: 0, gord: 2.3, sodio: 52, fonte: 'TBCA (USP)', obs: 'Não está na TACO; valor da TBCA para o filé cru. Pese cru, se puder: grelhado perde água e 100 g prontos concentram mais. A versão grelhada não entrou por falta de confirmação.' },
 ];
 // Modelos: abrem o formulário já preenchido com o que não varia; valores vêm do rótulo do produto.
 const MODELOS_BASE = [
@@ -1328,12 +1332,12 @@ function importarAlimentosBase() {
   // Itens já importados antes sem medida ganham a medida sugerida (só se não têm nenhuma).
   const completar = ALIMENTOS_BASE.filter((b) => porNome.has(b.nome.toLowerCase()) && b.medidas && !porNome.get(b.nome.toLowerCase()).medidas.length);
   if (!novos.length && !completar.length) { toast('Esses alimentos já estão cadastrados.'); return; }
-  const desc = (b) => `• ${b.nome}${b.medidas ? ` — ${b.medidas.map((m) => `1 ${m.nome} ≈ ${m.equivale} ${b.refUnidade || 'g'}`).join(', ')}` : ''}`;
-  const msg = [novos.length ? `Adicionar ${novos.length} alimento(s) da ${FONTE_TACO}, por 100 g:\n${novos.map(desc).join('\n')}` : '',
+  const desc = (b) => `• ${b.nome}${b.fonte ? ` [${b.fonte}]` : ''}${b.medidas ? ` — ${b.medidas.map((m) => `1 ${m.nome} ≈ ${m.equivale} ${b.refUnidade || 'g'}`).join(', ')}` : ''}`;
+  const msg = [novos.length ? `Adicionar ${novos.length} alimento(s), por 100 g (${FONTE_TACO}; item com outra fonte está marcado):\n${novos.map(desc).join('\n')}` : '',
     completar.length ? `Acrescentar medida caseira em:\n${completar.map(desc).join('\n')}` : '',
     'Pesos por unidade são médias aproximadas: confira pesando. Você pode corrigir qualquer valor depois.'].filter(Boolean).join('\n\n');
   if (!confirmar(msg)) return;
-  for (const b of novos) D.alimentos.push({ id: uid(), nome: b.nome, marca: '', estado: b.estado, refQtd: 100, refUnidade: b.refUnidade || 'g', kcal: b.kcal, prot: b.prot, carb: b.carb, gord: b.gord, medidas: (b.medidas || []).map((m) => ({ ...m })), favorito: false, fonte: FONTE_TACO, obs: b.obs || '', criadoEm: new Date().toISOString() });
+  for (const b of novos) D.alimentos.push({ id: uid(), nome: b.nome, marca: '', estado: b.estado, refQtd: 100, refUnidade: b.refUnidade || 'g', kcal: b.kcal, prot: b.prot, carb: b.carb, gord: b.gord, fibra: b.fibra ?? null, sodio: b.sodio ?? null, medidas: (b.medidas || []).map((m) => ({ ...m })), favorito: false, fonte: b.fonte || FONTE_TACO, obs: b.obs || '', criadoEm: new Date().toISOString() });
   for (const b of completar) { const a = porNome.get(b.nome.toLowerCase()); a.medidas = b.medidas.map((m) => ({ ...m })); if (!a.obs) a.obs = b.obs || ''; }
   D.alimentos.sort((x, y) => x.nome.localeCompare(y.nome, 'pt-BR'));
   salvar(); UI.aba = 'alimentos'; UI.filtroAlimentos = 'todos'; render(); toast(`${novos.length} adicionado(s), ${completar.length} completado(s).`);
