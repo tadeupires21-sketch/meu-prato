@@ -4,7 +4,7 @@ const { chromium } = require('playwright'); const assert = require('assert');
   const erros = []; p.on('pageerror', (e) => { erros.push(e.message); console.log('PAGEERROR', e.stack.split('\n').slice(0, 3).join(' <- ')); }); const prompts = []; p.on('dialog', (d) => { if (d.type() === 'prompt') { prompts.push(d.message()); d.accept('Meu café'); } else d.accept(); });
   const txt = async (sel) => (await p.locator(sel).first().innerText()).replace(/\s+/g, ' ').trim();
   const SHOT = '/tmp/claude-0/-home-user/31289882-dc9d-5eca-88d1-67be19cd3d3b/scratchpad/';
-  await p.goto('http://127.0.0.1:8765/index.html'); await p.click('.tab[data-tab=config]'); await p.click('[data-act=importar-base]'); await p.waitForSelector('.list-item'); await p.click('.tab[data-tab=hoje]');
+  await p.goto('http://127.0.0.1:8765/index.html'); await p.click('.tab[data-tab=config]'); await p.click('[data-act=importar-base]'); await p.waitForSelector('.sheet [data-ok]'); await p.click('.sheet [data-ok]'); await p.waitForSelector('.list-item'); await p.click('.tab[data-tab=hoje]');
   // 1. seleção em lote: 3 itens, revisar, desmarcar 1, alterar quantidade, confirmar
   await p.click('[data-act=adicionar][data-idx="1"]'); await p.click('.sheet [data-lote]');
   for (const q of ['arroz branco', 'feijao carioca', 'frango']) { await p.fill('.sheet .search', q); await p.click('.sheet [data-act=pick-alimento]'); }

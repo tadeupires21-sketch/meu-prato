@@ -18,7 +18,7 @@ const URL = 'http://127.0.0.1:8765/index.html';
   // 1. Cadastrar alimento: 200 kcal, 10 g prot por 100 g, com medida "unidade" = 50 g
   await p.click('.tab[data-tab=alimentos]');
   await p.click('[data-act=novo-alimento]');
-  await p.fill('[name=nome]', 'Alimento Teste'); await p.fill('[name=marca]', 'Marca T');
+  await p.fill('[name=nome]', 'Alimento Teste'); await p.click('.sheet summary'); await p.fill('[name=marca]', 'Marca T');
   await p.fill('[name=kcal]', '200'); await p.fill('[name=prot]', '10'); await p.fill('[name=carb]', '20'); await p.fill('[name=gord]', '5');
   await p.fill('[name=mNome]', 'unidade'); await p.fill('[name=mEq]', '50'); await p.click('[data-add-medida]');
   await p.screenshot({ path: SHOT + '/02-form-alimento.png' });

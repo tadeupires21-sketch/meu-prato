@@ -142,3 +142,5 @@ hr.sep { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
 .tabela td:first-child { color: var(--muted); }
 .bar { position: relative; }
 .meta-marca { position: absolute; top: -3px; width: 2px; height: 12px; background: var(--ink); opacity: .5; }
+.opcional summary::-webkit-details-marker { display: none; }
+[hidden] { display: none !important; }

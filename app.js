@@ -435,6 +435,12 @@ function cartaoAgua(dia) {
   </section>`;
 }
 function totaisDia(dia) { return somar(dia ? dia.refeicoes.flatMap((r) => r.itens) : []); }
+// Quantas vezes cada alimento/receita entrou numa refeição com este nome nos últimos 60 dias (sugestão explicável).
+function frequenciaPorRefeicao(nomeRefeicao, dias = 60) {
+  const limite = somarDias(hojeISO(), -dias); const cont = new Map();
+  for (const [data, dia] of Object.entries(D.dias)) { if (data < limite) continue; for (const r of dia.refeicoes) if (r.nome === nomeRefeicao) for (const it of r.itens) { const k = `${it.tipo}:${it.refId}`; cont.set(k, (cont.get(k) || 0) + 1); } }
+  return cont;
+}
 function registrarRecente(tipo, id) {
   D.recentes = [{ tipo, id, em: Date.now() }, ...D.recentes.filter((x) => !(x.tipo === tipo && x.id === id))].slice(0, 30);
 }
@@ -672,6 +678,9 @@ function menu(titulo, opcoes) {
 function folhaEscolher(idxRefeicao, aoEscolher, resumo = '') {
   let filtro = 'recentes'; let busca = '';
   const lote = idxRefeicao !== null && idxRefeicao !== undefined; // modo lote só faz sentido ao montar uma refeição
+  const nomeRef = lote ? (obterDia(UI.data, false)?.refeicoes[idxRefeicao]?.nome || null) : null;
+  const freq = nomeRef ? frequenciaPorRefeicao(nomeRef) : new Map();
+  const usado = (t, id) => { const n = freq.get(`${t}:${id}`); return n ? ` <span class="badge" title="Vezes que entrou em ${esc(nomeRef)} nos últimos 60 dias">${n}× ${n === 1 ? 'no' : 'no'} ${esc(nomeRef.toLowerCase())}</span>` : ''; };
   const rascunho = (lote && UI.rascunhoLote && UI.rascunhoLote.idx === idxRefeicao && UI.rascunhoLote.data === UI.data) ? UI.rascunhoLote.itens : [];
   let selecionando = rascunho.length > 0;
   const chave = (t, id) => `${t}:${id}`;
@@ -682,16 +691,22 @@ function folhaEscolher(idxRefeicao, aoEscolher, resumo = '') {
     const q = busca.trim();
     let lista = [];
     if (q) filtro = 'todos';
-    if (filtro === 'recentes') lista = D.recentes.map((x) => x.tipo === 'alimento' ? D.alimentos.find((a) => a.id === x.id) : Object.assign({ _receita: true }, D.receitas.find((r) => r.id === x.id))).filter((x) => x && x.id);
+    if (filtro === 'recentes') {
+      lista = D.recentes.map((x) => x.tipo === 'alimento' ? D.alimentos.find((a) => a.id === x.id) : Object.assign({ _receita: true }, D.receitas.find((r) => r.id === x.id))).filter((x) => x && x.id);
+      // Com refeição conhecida, o que mais entrou nela vem primeiro (recência desempata).
+      if (nomeRef && freq.size) lista = lista.map((x, i) => ({ x, i, f: freq.get(`${x._receita ? 'receita' : 'alimento'}:${x.id}`) || 0 })).sort((a, b) => b.f - a.f || a.i - b.i).map((o) => o.x);
+    }
     else if (filtro === 'favoritos') lista = [...D.alimentos.filter((a) => a.favorito), ...D.receitas.filter((r) => r.favorito).map((r) => Object.assign({ _receita: true }, r))];
     else if (filtro === 'receitas') lista = D.receitas.map((r) => Object.assign({ _receita: true }, r));
     else if (filtro === 'combinacoes') lista = [];
     else lista = filtrarOrdenar([...D.alimentos, ...D.receitas.map((r) => Object.assign({ _receita: true }, r))], q, (x) => x.nome, (x) => x.marca || '');
     const marca = (t, id) => selecionando ? `<span class="marca ${noRascunho(t, id) ? 'on' : ''}" aria-hidden="true">${noRascunho(t, id) ? '✓' : ''}</span>` : '';
     const combos = filtro === 'combinacoes' ? (D.combinacoes.length ? D.combinacoes.map((c) => itemListaCombinacao(c, 'pick-combo')).join('') : '<div class="empty">Nenhuma combinação salva. No menu ⋯ de uma refeição com itens, use “Salvar como combinação”.</div>') : '';
-    $('.lista', s).innerHTML = combos + (filtro === 'combinacoes' ? '' : (lista.length ? lista.map((x) => x._receita ? itemListaReceita(x, 'pick-receita', '').replace('<div class="grow">', marca('receita', x.id) + '<div class="grow">') : itemListaAlimento(x, 'pick-alimento', '').replace('<div class="grow">', marca('alimento', x.id) + '<div class="grow">')).join('')
+    const comBadge = (html, t, id) => usado(t, id) ? html.replace('<div class="meta">', `<div class="meta">${usado(t, id)} · `) : html;
+    $('.lista', s).innerHTML = combos + (filtro === 'combinacoes' ? '' : (lista.length ? lista.map((x) => x._receita ? comBadge(itemListaReceita(x, 'pick-receita', ''), 'receita', x.id).replace('<div class="grow">', marca('receita', x.id) + '<div class="grow">') : comBadge(itemListaAlimento(x, 'pick-alimento', ''), 'alimento', x.id).replace('<div class="grow">', marca('alimento', x.id) + '<div class="grow">')).join('')
       : `<div class="empty">${filtro === 'recentes' ? 'Nada usado recentemente.' : filtro === 'favoritos' ? 'Nenhum favorito ainda.' : 'Nada encontrado.'}</div>`)
-      + `<button class="list-item" data-act="pick-novo"><div class="grow"><div class="name" style="color:var(--brand)">+ Cadastrar novo alimento${q ? ` “${esc(busca.trim())}”` : ''}</div></div></button>`);
+      + `<button class="list-item" data-act="pick-novo"><div class="grow"><div class="name" style="color:var(--brand)">+ Cadastrar novo alimento${q ? ` “${esc(busca.trim())}”` : ''}</div></div></button>`
+      + (D.alimentos.length ? '' : `<button class="list-item" data-act="pick-base"><div class="grow"><div class="name" style="color:var(--brand)">+ Adicionar alimentos comuns (TACO)</div><div class="meta">Arroz, feijão, ovo, frango, frutas… com valores da tabela oficial.</div></div></button>`));
     $$('.chip', s).forEach((c) => c.classList.toggle('active', c.dataset.f === filtro));
     const escolher = (t, id) => { if (selecionando) { alternar(t, id); desenhar(s); } else aoEscolher(t, id); };
     $$('[data-act="pick-alimento"]', s).forEach((b) => b.addEventListener('click', () => escolher('alimento', b.dataset.id)));
@@ -699,6 +714,7 @@ function folhaEscolher(idxRefeicao, aoEscolher, resumo = '') {
     $$('[data-act="pick-combo"]', s).forEach((b) => b.addEventListener('click', () => { if (lote) menuCombinacao(b.dataset.id, idxRefeicao); else menuCombinacao(b.dataset.id); }));
     const barra = $('.barra-lote', s);
     if (barra) { barra.hidden = !selecionando; if (selecionando) { $('[data-revisar]', barra).textContent = rascunho.length ? `Revisar ${rascunho.length} ${rascunho.length === 1 ? 'item' : 'itens'}` : 'Toque nos itens para marcar'; $('[data-revisar]', barra).disabled = !rascunho.length; } $('[data-lote]', s).classList.toggle('active', selecionando); }
+    $('[data-act="pick-base"]', s)?.addEventListener('click', () => folhaImportarBase(() => { if (lote) abrirSeletor(idxRefeicao); }));
     $('[data-act="pick-novo"]', s)?.addEventListener('click', () => folhaAlimento(null, { nome: busca.trim() }, (novo) => { if (selecionando) { alternar('alimento', novo.id); abrirSeletor(idxRefeicao); } else aoEscolher('alimento', novo.id); }));
   };
   abrirFolha(`${cab('Adicionar alimento')}
@@ -1013,18 +1029,23 @@ function folhaAlimento(id, inicial = {}, aoSalvar) {
   const linhaMedida = (m, i) => `<div class="ing"><div class="grow">${esc(m.nome)} = ${fmt(m.equivale, 2)} <span class="un"></span></div><button type="button" class="btn sm ghost danger" data-rm="${i}">remover</button></div>`;
   abrirFolha(`${cab(a ? 'Editar alimento' : 'Novo alimento')}
     <form data-form="alimento">
+      <h3>Identificação</h3>
       <div class="field"><label>Nome</label><input name="nome" value="${esc(v.nome)}" required autofocus></div>
       <div class="grid2">
-        <div class="field"><label>Marca (opcional)</label><input name="marca" value="${esc(v.marca || '')}"></div>
         <div class="field"><label>Estado</label><select name="estado"><option value="na" ${v.estado === 'na' ? 'selected' : ''}>não se aplica</option><option value="cru" ${v.estado === 'cru' ? 'selected' : ''}>cru</option><option value="cozido" ${v.estado === 'cozido' ? 'selected' : ''}>cozido</option></select></div>
       </div>
       ${(a && a.fonte) || (!a && v.fonte) ? `<p class="help" style="margin-top:0">Valores de origem: <b>${esc(v.fonte)}</b>. Se editar, eles passam a ser seus.</p>` : ''}
       ${v.obs ? `<p class="help" style="margin-top:0;background:var(--warn-soft);padding:8px 10px;border-radius:8px">${esc(v.obs)}</p>` : ''}
-      <p class="help" style="margin-top:0">Os valores abaixo valem para a <b>quantidade de referência</b> (ex.: 100 g, 100 ml ou 1 porção). Copie do rótulo.</p>
+      <h3>Referência do rótulo</h3>
+      <p class="help" style="margin-top:0">O rótulo informa os valores por 100 g/ml ou por porção. Escolha como está no rótulo; o app não converte nada sozinho.</p>
+      <div class="chips base-chips">${[['100', 'Por 100 g ou ml'], ['porcao', 'Por porção do rótulo'], ['outra', 'Outra quantidade']].map(([k, n]) => `<button type="button" class="chip" data-base="${k}">${n}</button>`).join('')}</div>
       <div class="grid2">
-        <div class="field"><label>Quantidade de referência</label><input name="refQtd" inputmode="decimal" value="${fmtIn(v.refQtd, 3)}" required></div>
+        <div class="field"><label class="rot-ref">Quantidade de referência</label><input name="refQtd" inputmode="decimal" value="${fmtIn(v.refQtd, 3)}" required></div>
         <div class="field"><label>Unidade</label><select name="refUnidade">${['g', 'ml', 'porção'].map((u) => `<option ${v.refUnidade === u ? 'selected' : ''}>${u}</option>`).join('')}</select></div>
       </div>
+      <label class="check opt-porcao" hidden><input type="checkbox" name="criarPorcao" checked> <span class="small">Criar a medida “porção do rótulo” com essa quantidade, para registrar “1 porção”.</span></label>
+      <p class="help base-txt" style="margin-top:0"></p>
+      <h3>Nutrientes <span class="muted small base-txt2"></span></h3>
       <div class="grid2">
         <div class="field"><label>Calorias (kcal)</label><input name="kcal" inputmode="decimal" value="${v.kcal === '' ? '' : fmtIn(v.kcal, 2)}" required></div>
         <div class="field"><label>Proteínas (g)</label><input name="prot" inputmode="decimal" value="${v.prot === '' ? '' : fmtIn(v.prot, 2)}" required></div>
@@ -1034,6 +1055,8 @@ function folhaAlimento(id, inicial = {}, aoSalvar) {
         <div class="field"><label>Sódio (mg) — opcional</label><input name="sodio" inputmode="decimal" value="${v.sodio == null || v.sodio === '' ? '' : fmtIn(v.sodio, 2)}" placeholder="não informado"></div>
       </div>
       <p class="help" style="margin-top:-4px">Em branco = não informado (diferente de 0). Sódio em mg; o rótulo às vezes traz só “sal”: não converta, deixe em branco.</p>
+      <details class="opcional" ${(v.marca || (v.medidas && v.medidas.length) || v.codigoBarras) ? 'open' : ''}><summary class="btn sm full" style="list-style:none;cursor:pointer;margin:6px 0 10px">Mais opções: marca, medidas caseiras, código de barras</summary>
+      <div class="field"><label>Marca (opcional)</label><input name="marca" value="${esc(v.marca || '')}"></div>
       <h3>Medidas caseiras (opcional)</h3>
       <p class="help">Ex.: “unidade” = 50 g, “scoop” = 30 g, “colher de sopa” = 15 ml. Sem equivalência cadastrada o app não presume conversão.</p>
       <div class="medidas">${medidas.map(linhaMedida).join('')}</div>
@@ -1042,8 +1065,9 @@ function folhaAlimento(id, inicial = {}, aoSalvar) {
         <div class="field"><label>Equivale a (<span class="un"></span>)</label><input name="mEq" inputmode="decimal" placeholder="50"></div>
       </div>
       <button type="button" class="btn sm full" data-add-medida>+ Adicionar medida</button>
+      <div class="field" style="margin-top:10px"><label>Código de barras (opcional)</label><input name="codigoBarras" inputmode="numeric" value="${esc(v.codigoBarras || '')}" placeholder="Para reconhecer o produto ao ler o código"></div>
+      </details>
       <hr class="sep">
-      <div class="field"><label>Código de barras (opcional)</label><input name="codigoBarras" inputmode="numeric" value="${esc(v.codigoBarras || '')}" placeholder="Para reconhecer o produto ao ler o código"></div>
       <label class="check"><input type="checkbox" name="favorito" ${v.favorito ? 'checked' : ''}> Favorito</label>
       <div class="stack" style="margin-top:8px">
         <button class="btn primary full" type="submit">${a ? 'Salvar alterações' : 'Salvar alimento'}</button>
@@ -1054,7 +1078,19 @@ function folhaAlimento(id, inicial = {}, aoSalvar) {
     const form = $('form', s);
     const atualizarUn = () => $$('.un', s).forEach((e) => { e.textContent = form.refUnidade.value; });
     const redesenharMedidas = () => { $('.medidas', s).innerHTML = medidas.map(linhaMedida).join(''); atualizarUn(); $$('[data-rm]', s).forEach((b) => b.addEventListener('click', () => { medidas.splice(Number(b.dataset.rm), 1); redesenharMedidas(); })); };
-    form.refUnidade.addEventListener('change', atualizarUn); redesenharMedidas();
+    // Base do rótulo: "100" fixa 100; "porcao" libera a quantidade e oferece criar a medida; "outra" é livre.
+    let base = (num(form.refQtd.value) === 100 && (form.refUnidade.value === 'g' || form.refUnidade.value === 'ml')) ? '100' : (v.medidas || []).some((m) => m.nome === 'porção do rótulo') ? 'porcao' : 'outra';
+    const atualizarBase = () => {
+      $$('.base-chips .chip', s).forEach((c) => c.classList.toggle('active', c.dataset.base === base));
+      form.refQtd.readOnly = base === '100'; if (base === '100') form.refQtd.value = '100';
+      $('.opt-porcao', s).hidden = base !== 'porcao';
+      $('.rot-ref', s).textContent = base === 'porcao' ? 'Peso ou volume da porção' : 'Quantidade de referência';
+      const q = num(form.refQtd.value); const txt = `Base: valores por ${q > 0 ? fmtIn(q, 3) : '…'} ${form.refUnidade.value}`;
+      $('.base-txt', s).textContent = txt + (base === 'porcao' ? ' (porção do rótulo).' : '.'); $('.base-txt2', s).textContent = '· por ' + (q > 0 ? fmtIn(q, 3) : '…') + ' ' + form.refUnidade.value;
+    };
+    $$('.base-chips .chip', s).forEach((c) => c.addEventListener('click', () => { base = c.dataset.base; if (base === 'porcao' && num(form.refQtd.value) === 100) form.refQtd.value = ''; atualizarBase(); if (base !== '100') form.refQtd.focus(); }));
+    form.refQtd.addEventListener('input', atualizarBase);
+    form.refUnidade.addEventListener('change', () => { atualizarUn(); atualizarBase(); }); redesenharMedidas(); atualizarBase();
     $('[data-add-medida]', s).addEventListener('click', () => {
       const nome = form.mNome.value.trim(); const eq = num(form.mEq.value);
       if (!nome) { toast('Dê um nome à medida.'); return; }
@@ -1069,7 +1105,8 @@ function folhaAlimento(id, inicial = {}, aoSalvar) {
         fibra: form.fibra.value.trim() === '' ? null : num(form.fibra.value), sodio: form.sodio.value.trim() === '' ? null : num(form.sodio.value),
         medidas, favorito: form.favorito.checked, obs: v.obs || '', codigoBarras: normalizarCodigo(form.codigoBarras.value) };
       if (!campos.nome) { toast('Informe o nome.'); return; }
-      if (!(campos.refQtd > 0)) { toast('Quantidade de referência deve ser maior que zero.'); return; }
+      if (!(campos.refQtd > 0)) { toast(base === 'porcao' ? 'Informe o peso ou volume da porção do rótulo.' : 'Quantidade de referência deve ser maior que zero.'); return; }
+      if (base === 'porcao' && form.criarPorcao.checked && !['g', 'ml', 'porção'].includes('porção do rótulo') && !medidas.some((m) => m.nome === 'porção do rótulo') && campos.refUnidade !== 'porção') medidas.push({ nome: 'porção do rótulo', equivale: campos.refQtd });
       for (const k of NUTR_OBRIG) if (!(campos[k] >= 0)) { toast(`Valor inválido em ${k}. Use números (vírgula ou ponto).`); return; }
       for (const k of NUTR_OPC) if (campos[k] !== null && !(campos[k] >= 0)) { toast(`Valor inválido em ${k}. Use números ou deixe em branco.`); return; }
       if (campos.codigoBarras) { const dono = D.alimentos.find((x) => x !== a && x.codigoBarras === campos.codigoBarras); if (dono && !confirmar(`O código ${campos.codigoBarras} já está em “${dono.nome}”. Manter nos dois?`)) return; }
@@ -1365,26 +1402,61 @@ function importarJSON(arquivo) {
 }
 
 // ---------- Alimentos comuns (TACO) ----------
-function importarAlimentosBase() {
+// Estado de cada item da lista embutida em relação ao cadastro atual.
+function estadoBase() {
   const porNome = new Map(D.alimentos.map((a) => [a.nome.toLowerCase(), a]));
-  const novos = ALIMENTOS_BASE.filter((b) => !porNome.has(b.nome.toLowerCase()));
-  // Itens já importados antes sem medida ganham a medida sugerida (só se não têm nenhuma).
-  const completar = ALIMENTOS_BASE.filter((b) => porNome.has(b.nome.toLowerCase()) && b.medidas && !porNome.get(b.nome.toLowerCase()).medidas.length);
-  // Itens já importados da mesma fonte e não editados ganham fibra/sódio que estavam vazios (nunca sobrescreve valor existente).
   const mesmaFonte = (a, b) => (a.fonte || '') === (b.fonte || FONTE_TACO);
-  const completarOpc = ALIMENTOS_BASE.filter((b) => { const a = porNome.get(b.nome.toLowerCase()); return a && mesmaFonte(a, b) && NUTR_OPC.some((k) => a[k] == null && b[k] != null); });
-  if (!novos.length && !completar.length && !completarOpc.length) { toast('Esses alimentos já estão cadastrados e completos.'); return; }
-  const desc = (b) => `• ${b.nome}${b.fonte ? ` [${b.fonte}]` : ''}${b.medidas ? ` — ${b.medidas.map((m) => `1 ${m.nome} ≈ ${m.equivale} ${b.refUnidade || 'g'}`).join(', ')}` : ''}`;
-  const msg = [novos.length ? `Adicionar ${novos.length} alimento(s), por 100 g (${FONTE_TACO}; item com outra fonte está marcado):\n${novos.map(desc).join('\n')}` : '',
-    completar.length ? `Acrescentar medida caseira em:\n${completar.map(desc).join('\n')}` : '',
-    completarOpc.length ? `Preencher fibras/sódio (da mesma fonte, só onde estava vazio) em ${completarOpc.length} alimento(s) já cadastrado(s).` : '',
-    'Pesos por unidade são médias aproximadas: confira pesando. Você pode corrigir qualquer valor depois.'].filter(Boolean).join('\n\n');
-  if (!confirmar(msg)) return;
-  for (const b of novos) D.alimentos.push({ id: uid(), nome: b.nome, marca: '', estado: b.estado, refQtd: 100, refUnidade: b.refUnidade || 'g', kcal: b.kcal, prot: b.prot, carb: b.carb, gord: b.gord, fibra: b.fibra ?? null, sodio: b.sodio ?? null, medidas: (b.medidas || []).map((m) => ({ ...m })), favorito: false, fonte: b.fonte || FONTE_TACO, obs: b.obs || '', criadoEm: new Date().toISOString() });
-  for (const b of completar) { const a = porNome.get(b.nome.toLowerCase()); a.medidas = b.medidas.map((m) => ({ ...m })); if (!a.obs) a.obs = b.obs || ''; }
-  for (const b of completarOpc) { const a = porNome.get(b.nome.toLowerCase()); for (const k of NUTR_OPC) if (a[k] == null && b[k] != null) a[k] = b[k]; }
+  return ALIMENTOS_BASE.map((b) => {
+    const a = porNome.get(b.nome.toLowerCase());
+    const completarMed = !!(a && b.medidas && !a.medidas.length);
+    const completarOpc = !!(a && mesmaFonte(a, b) && NUTR_OPC.some((k) => a[k] == null && b[k] != null));
+    return { b, a, novo: !a, completar: completarMed || completarOpc, completarMed, completarOpc };
+  });
+}
+function aplicarBase(escolhidos, completarTambem) {
+  const est = estadoBase(); let n = 0, c = 0;
+  for (const e of est) {
+    if (e.novo && escolhidos.has(e.b.nome)) {
+      const b = e.b; D.alimentos.push({ id: uid(), nome: b.nome, marca: '', estado: b.estado, refQtd: 100, refUnidade: b.refUnidade || 'g', kcal: b.kcal, prot: b.prot, carb: b.carb, gord: b.gord, fibra: b.fibra ?? null, sodio: b.sodio ?? null, medidas: (b.medidas || []).map((m) => ({ ...m })), favorito: false, fonte: b.fonte || FONTE_TACO, obs: b.obs || '', criadoEm: new Date().toISOString() }); n++;
+    } else if (!e.novo && completarTambem && e.completar) {
+      if (e.completarMed) { e.a.medidas = e.b.medidas.map((m) => ({ ...m })); if (!e.a.obs) e.a.obs = e.b.obs || ''; }
+      if (e.completarOpc) for (const k of NUTR_OPC) if (e.a[k] == null && e.b[k] != null) e.a[k] = e.b[k];
+      c++;
+    }
+  }
   D.alimentos.sort((x, y) => x.nome.localeCompare(y.nome, 'pt-BR'));
-  salvar(); UI.aba = 'alimentos'; UI.filtroAlimentos = 'todos'; render(); toast(`${novos.length} adicionado(s), ${completar.length + completarOpc.length} completado(s).`);
+  if (salvar()) toast(`${n} adicionado(s)${c ? `, ${c} completado(s)` : ''}.`);
+  return n + c;
+}
+// Folha de importação: escolher quais itens entram, com estado (cru/cozido) e fonte visíveis.
+function folhaImportarBase(aoTerminar) {
+  const est = estadoBase(); const sel = new Set(est.filter((e) => e.novo).map((e) => e.b.nome)); let busca = '';
+  const nCompletar = est.filter((e) => e.completar).length;
+  const desenhar = (s) => {
+    const q = busca.trim();
+    const vis = est.filter((e) => !q || pontuarBusca(q, e.b.nome) > 0);
+    $('.lista', s).innerHTML = vis.map((e) => { const b = e.b; const d = NUTR.find((n) => n.k === 'kcal');
+      return `<label class="list-item" style="cursor:pointer;gap:8px"><input type="checkbox" data-nome="${esc(b.nome)}" ${e.novo ? (sel.has(b.nome) ? 'checked' : '') : 'checked disabled'} style="width:22px;height:22px;flex:none">
+        <div class="grow"><div class="name">${esc(b.nome)}${b.estado !== 'na' ? ` <span class="badge neutral">${b.estado}</span>` : ''}${b.fonte ? ` <span class="badge neutral">${esc(b.fonte)}</span>` : ''}</div>
+        <div class="meta">${fmt(b.kcal)} kcal · ${fmt(b.prot, 1)} g prot${b.fibra != null ? ` · fibra ${fmt(b.fibra, 1)}` : ''}${b.sodio != null ? ` · Na ${fmt(b.sodio)} mg` : ''} por 100 ${b.refUnidade || 'g'}${e.novo ? '' : e.completar ? ' · <b>já cadastrado, completável</b>' : ' · já cadastrado'}</div></div></label>`; }).join('') || '<div class="empty">Nada encontrado.</div>';
+    $$('input[data-nome]', s).forEach((c) => c.addEventListener('change', () => { if (c.checked) sel.add(c.dataset.nome); else sel.delete(c.dataset.nome); atualizarBotao(s); }));
+    atualizarBotao(s);
+  };
+  const atualizarBotao = (s) => { const ok = $('[data-ok]', s); const comp = $('[name=completar]', s)?.checked && nCompletar; ok.disabled = !sel.size && !comp; ok.textContent = sel.size ? `Adicionar ${sel.size} ${sel.size === 1 ? 'alimento' : 'alimentos'}` : comp ? `Completar ${nCompletar} já cadastrado(s)` : 'Nada selecionado'; };
+  abrirFolha(`${cab('Alimentos comuns')}
+    <p class="help" style="margin-top:-6px">Valores por 100 g da ${FONTE_TACO}, lidos do PDF oficial; item de outra fonte está marcado. Entram como cadastro normal, editável. Pesos por unidade são médias: confira pesando.</p>
+    <input class="search" type="search" placeholder="Filtrar a lista" aria-label="Filtrar">
+    <div class="row between small" style="margin-bottom:6px"><button type="button" class="btn sm ghost" data-todos>Marcar todos os novos</button><button type="button" class="btn sm ghost" data-nenhum>Desmarcar</button></div>
+    <div class="lista"></div>
+    ${nCompletar ? `<label class="check" style="margin-top:8px"><input type="checkbox" name="completar" checked> <span class="small">Também preencher fibras/sódio e medidas vazias em ${nCompletar} item(ns) já cadastrado(s) da mesma fonte, sem sobrescrever valores.</span></label>` : ''}
+    <button class="btn primary full" data-ok style="margin-top:10px">Adicionar</button>`, (s) => {
+    $('.search', s).addEventListener('input', (e) => { busca = e.target.value; desenhar(s); });
+    $('[data-todos]', s).addEventListener('click', () => { est.filter((e) => e.novo).forEach((e) => sel.add(e.b.nome)); desenhar(s); });
+    $('[data-nenhum]', s).addEventListener('click', () => { sel.clear(); desenhar(s); });
+    $('[name=completar]', s)?.addEventListener('change', () => atualizarBotao(s));
+    $('[data-ok]', s).addEventListener('click', () => { const comp = !!$('[name=completar]', s)?.checked; fecharFolha(); aplicarBase(sel, comp); UI.aba = 'alimentos'; UI.filtroAlimentos = 'todos'; render(); if (aoTerminar) aoTerminar(); });
+    desenhar(s);
+  });
 }
 function novoDeModelo(i) {
   const m = MODELOS_BASE[i];
@@ -1459,7 +1531,7 @@ document.addEventListener('click', (e) => {
     'exportar-csv': exportarCSV,
     'importar-json': () => $('[data-act="arquivo-json"]').click(),
     'alternar-demo': alternarDemo,
-    'importar-base': importarAlimentosBase,
+    'importar-base': () => folhaImportarBase(),
     'modelo': () => novoDeModelo(Number(el.dataset.i)),
     'apagar-tudo': () => { if (!confirmar('Apagar TODOS os alimentos, receitas e registros deste modo? Não dá para desfazer. Exporte um backup antes, se quiser.')) return; if (!confirmar('Confirma mesmo? Última chance.')) return; D = dadosVazios(); salvar(); render(); toast('Dados apagados.'); },
   };
