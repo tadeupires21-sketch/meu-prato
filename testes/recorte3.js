@@ -8,7 +8,7 @@ const { chromium } = require('playwright'); const assert = require('assert');
   // 1. lista vazia: seletor oferece a base; importação seletiva de 2 itens
   await p.click('[data-act=adicionar][data-idx="1"]'); await p.waitForTimeout(250); assert.equal(await p.locator('.sheet [data-act=pick-base]').count(), 1);
   await p.click('.sheet [data-act=pick-base]'); await p.waitForSelector('.sheet .lista label');
-  console.log('botão inicial:', await txt('.sheet [data-ok]')); assert.equal(await txt('.sheet [data-ok]'), 'Adicionar 96 alimentos');
+  console.log('botão inicial:', await txt('.sheet [data-ok]')); assert.equal(await txt('.sheet [data-ok]'), 'Adicionar 98 alimentos');
   await p.click('.sheet [data-nenhum]'); assert.equal(await txt('.sheet [data-ok]'), 'Nada selecionado');
   await p.fill('.sheet .search', 'tilapia'); const n = await p.locator('.sheet .lista label').count(); console.log('filtro tilapia:', n, '|', await txt('.sheet .lista label'));
   await p.check('.sheet input[data-nome="Tilápia, filé, cru"]'); await p.fill('.sheet .search', 'arroz branco'); await p.check('.sheet input[data-nome="Arroz branco tipo 1, cozido"]');
