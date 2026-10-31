@@ -3,9 +3,10 @@
 - **TACO 4ª edição ampliada e revisada** (NEPA/Unicamp, 2011), PDF oficial hospedado pelo CFN:
   https://cfn.org.br/wp-content/uploads/2017/03/taco_4_edicao_ampliada_e_revisada.pdf
   Extraído com `pdftotext -layout` e `docs/taco_parse.py` (Tabela 1: energia, proteína, lipídeos, carboidrato,
-  fibra; Tabela 2: sódio). 85 dos 89 itens vêm daí, com nome TACO mapeado no gerador.
+  fibra; Tabela 2: sódio). a maior parte dos itens vem daí, com nome TACO mapeado no gerador.
 - **TBCA** (USP/FoRC), fichas BRC0031E (tilápia filé cru), BRC0486E (grelhado sem óleo e sem sal) e BRC0488E
   (grelhado com óleo de soja, sem sal). Energia informada em kJ; kcal = kJ ÷ 4,184.
+- **TBCA**, purê de batata: BRC1195B (com manteiga e sal) e BRC0323B (com margarina e sal), receitas-padrão.
 - **Leite de vaca integral**: a TACO não traz leite líquido (linhas com asterisco). Valores médios de outras
   tabelas, por 100 ml, marcados como tal. Prefira o rótulo.
 - **Azeite de oliva extra virgem**: TACO linha 260 (884 kcal, 100 g lipídeos; fibra e sódio “NA”).
