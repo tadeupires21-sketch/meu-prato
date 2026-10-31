@@ -6,6 +6,7 @@
   fibra; Tabela 2: sódio). a maior parte dos itens vem daí, com nome TACO mapeado no gerador.
 - **TBCA** (USP/FoRC), fichas BRC0031E (tilápia filé cru), BRC0486E (grelhado sem óleo e sem sal) e BRC0488E
   (grelhado com óleo de soja, sem sal). Energia informada em kJ; kcal = kJ ÷ 4,184.
+- **TBCA**, ovo mexido: BRC0065J (sem óleo e sem sal), BRC0027J (com margarina e sal), BRC0062J (com óleo de soja e sal).
 - **TBCA**, purê de batata: BRC1195B (com manteiga e sal) e BRC0323B (com margarina e sal), receitas-padrão.
 - **Leite de vaca integral**: a TACO não traz leite líquido (linhas com asterisco). Valores médios de outras
   tabelas, por 100 ml, marcados como tal. Prefira o rótulo.
