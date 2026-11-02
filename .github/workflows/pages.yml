@@ -1,28 +1,67 @@
-name: Publicar no GitHub Pages
+name: Testar e publicar no GitHub Pages
+# O teste principal (npm run test:e2e) roda em todo pull request e em todo push na main.
+# A publicação só acontece na main e só depois que o teste passa: falhou, não publica.
 on:
+  pull_request:
   push:
     branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
-  pages: write
-  id-token: write
 concurrency:
-  group: pages
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  deploy:
+  test:
+    name: Teste principal (e2e)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Instalar dependências (lockfile)
+        run: npm ci
+      - name: Instalar Chromium do Playwright
+        run: npx playwright install --with-deps chromium
+      - name: Executar teste
+        run: npm run test:e2e
+      - name: Guardar capturas e backup do teste
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resultados-e2e
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+  deploy:
+    name: Publicar
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - name: Montar o site só com os arquivos do app
+        run: |
+          mkdir _site
+          cp -r index.html app.js styles.css sw.js manifest.webmanifest icons _site/
       - uses: actions/configure-pages@v5
         with:
           enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: _site
       - id: deployment
         uses: actions/deploy-pages@v4

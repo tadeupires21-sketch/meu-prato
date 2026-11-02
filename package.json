@@ -1,0 +1,14 @@
+{
+  "name": "meu-prato",
+  "private": true,
+  "description": "PWA pessoal de acompanhamento alimentar. Sem build: os arquivos do app são servidos como estão.",
+  "scripts": {
+    "test:e2e": "node scripts/run-e2e.js"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

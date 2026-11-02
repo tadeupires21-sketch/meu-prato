@@ -75,21 +75,34 @@ dependência, sem servidor de dados. Interface em pt-BR, feita para celular (And
 
 ## Testes
 
-`testes/entrega3.js` cobre metas opcionais e vigência, fibras/sódio com não informado × zero, propagação em
-receita, CSV com colunas opcionais, tabela do histórico com denominadores, sódio do OFF em g→mg e sal não
-convertido, validação.
+### Teste principal (obrigatório antes de publicar)
 
+Requisitos: Node 20 ou mais novo.
 
-`testes/entrega2.js` cobre a entrega 2: seleção em lote com rascunho preservado ao cadastrar alimento novo,
-prévia com desmarcar e ajustar, desfazer o lote, sem duplicar por toque repetido, combinação salva/aplicada com
-cadastro editado e excluído, repetir última com valores históricos escalados, isolamento entre dias, validação.
+```bash
+npm ci
+npx playwright install chromium
+npm run test:e2e
+```
 
+O comando sobe um servidor local só com Node, espera ele responder, roda `testes/e2e.js` num navegador
+Chromium sem interface e encerra o servidor. Termina com código 0 só se todas as verificações passarem;
+qualquer falha devolve código diferente de zero. Cada execução usa um contexto de navegador novo, com
+armazenamento vazio: não lê nem altera registros reais.
 
-`testes/recorte1.js` cobre o primeiro recorte da revisão de 29/10: cache do service worker, busca sem acentos,
-adicionar e continuar, desfazer, última porção (inclusive medida removida), detalhe de macros, escape de HTML no
-copiar, validação completa de backup, dados corrompidos preservados e falha de gravação sinalizada.
+Capturas de tela, o backup exportado e, em caso de falha, `falha.png` ficam em `test-results/e2e/`.
 
+O que ele verifica: cadastro de alimento e cálculo proporcional (200 kcal e 10 g de proteína por 100 g,
+150 g registram 300 kcal e 15 g), medida sem equivalência recusada, editar/duplicar/excluir consumo,
+alteração do cadastro sem mudar consumos anteriores, receita por porção e por grama, cópia de refeição e
+troca de dia sem mistura, persistência após recarregar, histórico, exportação JSON/CSV, importação inválida
+recusada e válida restaurada, isolamento do modo demonstração, metas, manifest e service worker.
 
-`testes/e2e.js` (Playwright; servidor em `127.0.0.1:8765`, rode `node testes/e2e.js <pasta-capturas>`) cobre: cadastro, cálculo proporcional (200 kcal/10 g por 100 g →
-150 g = 300 kcal/15 g), edição/duplicação/exclusão, receita por porção e por grama, cópia de refeição,
-troca de data sem mistura, persistência após recarregar, exportação/importação, modo demo isolado.
+No GitHub Actions (`.github/workflows/pages.yml`) o teste roda em todo pull request e em todo push na
+`main`. A publicação no Pages depende dele: se o teste falhar, o site continua na última versão boa e o
+log e as capturas ficam no artefato `resultados-e2e` da execução. Só os arquivos do app vão para o site.
+
+### Outros roteiros
+
+Os demais scripts em `testes/` (recortes e entregas, água, código de barras, alimentos-base) ainda
+esperam um servidor já rodando em `127.0.0.1:8765` e não fazem parte da verificação obrigatória.

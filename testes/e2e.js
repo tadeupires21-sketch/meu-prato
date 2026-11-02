@@ -1,10 +1,17 @@
+// Teste principal do app. Rodar com `npm run test:e2e` (sobe o servidor e passa BASE_URL).
+// Cada execução usa um contexto de navegador novo: localStorage vazio, nunca toca registros reais.
 const { chromium } = require('playwright');
 const assert = require('assert');
 const fs = require('fs');
-const SHOT = process.argv[2];
-const URL = 'http://127.0.0.1:8765/index.html';
+const path = require('path');
+const BASE = (process.env.BASE_URL || 'http://127.0.0.1:8765').replace(/\/$/, '');
+const URL = BASE + '/index.html';
+// Pasta de resultados (capturas e backup exportado): argumento, variável ou test-results/e2e no repositório.
+const SHOT = path.resolve(process.argv[2] || process.env.RESULTADOS || path.join(__dirname, '..', 'test-results', 'e2e'));
+fs.mkdirSync(SHOT, { recursive: true });
+let b;
 (async () => {
-  const b = await chromium.launch();
+  b = await chromium.launch();
   const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'pt-BR', acceptDownloads: true });
   const p = await ctx.newPage();
   const erros = []; p.on('pageerror', (e) => erros.push(e.message)); p.on('console', (m) => { if (m.type() === 'error') erros.push(m.text()); });
@@ -23,7 +30,6 @@ const URL = 'http://127.0.0.1:8765/index.html';
   await p.fill('[name=mNome]', 'unidade'); await p.fill('[name=mEq]', '50'); await p.click('[data-add-medida]');
   await p.screenshot({ path: SHOT + '/02-form-alimento.png' });
   await p.click('form[data-form=alimento] button[type=submit]');
-  await p.waitForTimeout(300); console.log('após submit: toast=', await p.locator('#toast').textContent(), 'sheet=', await p.locator('.sheet').count(), 'alimentos=', await p.evaluate(() => MeuPrato.dados().alimentos.length), 'aba=', await p.evaluate(() => document.querySelector('.tab.active').dataset.tab), await p.evaluate(() => [...document.querySelectorAll('form[data-form=alimento] input, form[data-form=alimento] select')].map(i => i.name + '=' + JSON.stringify(i.value) + (i.validity.valid ? '' : ' INVALIDO')).join(' | ')));
   await p.waitForSelector('.list-item');
   assert((await txt('.list-item')).includes('Alimento Teste'));
 
@@ -150,9 +156,15 @@ const URL = 'http://127.0.0.1:8765/index.html';
   assert((await txt('.stat .sub')).includes('de 1.800 kcal')); assert((await txt('.stat.prot .sub')).includes('de 130,5 g'));
 
   // PWA
-  const man = await (await p.request.get('http://127.0.0.1:8765/manifest.webmanifest')).json(); assert.equal(man.display, 'standalone');
+  const man = await (await p.request.get(BASE + '/manifest.webmanifest')).json(); assert.equal(man.display, 'standalone');
   const sw = await p.evaluate(async () => (await navigator.serviceWorker.getRegistration())?.active?.state || (await navigator.serviceWorker.ready).active.state);
   console.log('service worker:', sw, '| erros de console:', erros.length ? erros : 'nenhum');
   assert.equal(erros.length, 0);
-  await b.close(); console.log('TODOS OS TESTES PASSARAM');
-})().catch((e) => { console.error('FALHA:', e); process.exit(1); });
+  console.log('TODOS OS TESTES PASSARAM');
+})().then(async () => { await b.close(); process.exit(0); }, async (e) => {
+  console.error('FALHA:', e);
+  // Captura do estado no momento da falha, para o artefato do CI.
+  try { const pg = b && b.contexts()[0] && b.contexts()[0].pages()[0]; if (pg) await pg.screenshot({ path: path.join(SHOT, 'falha.png'), fullPage: true }); } catch { /* sem página */ }
+  try { if (b) await b.close(); } catch { /* já fechado */ }
+  process.exit(1);
+});
