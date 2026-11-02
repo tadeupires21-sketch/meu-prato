@@ -1,10 +1,13 @@
-const { chromium } = require('playwright'); const assert = require('assert');
+const { chromium } = require('playwright');
+const path = require('path');
+const { URL, pastaResultados, registrar, encerrar } = require('./_comum');
+const RES = pastaResultados('recorte3'); const assert = require('assert');
 (async () => {
-  const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
+  const b = registrar(await chromium.launch()); const p = await b.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
   const erros = []; p.on('pageerror', (e) => { erros.push(e.message); console.log('PAGEERROR', e.stack.split('\n').slice(0, 2).join(' <- ')); }); p.on('dialog', (d) => d.accept());
   const txt = async (sel) => (await p.locator(sel).first().innerText()).replace(/\s+/g, ' ').trim();
-  const SHOT = '/tmp/claude-0/-home-user/31289882-dc9d-5eca-88d1-67be19cd3d3b/scratchpad/';
-  await p.goto('http://127.0.0.1:8765/index.html');
+  const SHOT = RES + path.sep;
+  await p.goto(URL);
   // 1. lista vazia: seletor oferece a base; importação seletiva de 2 itens
   await p.click('[data-act=adicionar][data-idx="1"]'); await p.waitForTimeout(250); assert.equal(await p.locator('.sheet [data-act=pick-base]').count(), 1);
   await p.click('.sheet [data-act=pick-base]'); await p.waitForSelector('.sheet .lista label');
@@ -42,4 +45,4 @@ const { chromium } = require('playwright'); const assert = require('assert');
   assert(rec[0].startsWith('Arroz') && rec[0].includes('2× no almoço')); assert(rec[1].includes('1× no almoço')); await p.screenshot({ path: SHOT + 'r3-recentes.png' }); await p.keyboard.press('Escape');
   await p.click('[data-act=adicionar][data-idx="3"]'); await p.waitForSelector('.sheet .lista .list-item'); const recJ = await txt('.sheet .lista .list-item'); console.log('recentes jantar:', recJ); assert(!recJ.includes('×')); await p.keyboard.press('Escape');
   console.log('erros:', erros); assert.equal(erros.length, 0); await b.close(); console.log('OK');
-})().catch((e) => { console.error('FALHA', e); process.exit(1); });
+})().then(() => encerrar(0), (e) => { console.error('FALHA', e); return encerrar(1); });

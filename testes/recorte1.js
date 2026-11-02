@@ -1,7 +1,9 @@
-const { chromium } = require('playwright'); const assert = require('assert');
-const URL = 'http://127.0.0.1:8765/index.html';
+const { chromium } = require('playwright');
+const path = require('path');
+const { URL, pastaResultados, registrar, encerrar } = require('./_comum');
+const RES = pastaResultados('recorte1'); const assert = require('assert');
 (async () => {
-  const b = await chromium.launch(); const ctx = await b.newContext({ viewport: { width: 390, height: 844 } }); const p = await ctx.newPage();
+  const b = registrar(await chromium.launch()); const ctx = await b.newContext({ viewport: { width: 390, height: 844 } }); const p = await ctx.newPage();
   const erros = []; p.on('pageerror', (e) => erros.push(e.message)); p.on('dialog', (d) => d.accept());
   const txt = async (sel) => (await p.locator(sel).first().innerText()).replace(/\s+/g, ' ').trim();
   await p.goto(URL);
@@ -72,4 +74,4 @@ const URL = 'http://127.0.0.1:8765/index.html';
   await p.fill('form[data-form=metas] [name=kcal]', '1900'); await p.click('form[data-form=metas] button[type=submit]'); await p.waitForTimeout(100);
   console.log('falha salvar → toast:', await txt('#toast'), '| banner:', (await txt('#erro-banner')).slice(0, 40)); assert((await txt('#toast')).includes('Não foi possível')); assert((await txt('#erro-banner')).includes('NÃO foi salva'));
   console.log('erros de página:', erros); assert.equal(erros.length, 0); await b.close(); console.log('OK');
-})().catch((e) => { console.error('FALHA', e); process.exit(1); });
+})().then(() => encerrar(0), (e) => { console.error('FALHA', e); return encerrar(1); });

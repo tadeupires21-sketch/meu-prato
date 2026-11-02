@@ -1,8 +1,11 @@
-const { chromium } = require('playwright'); const assert = require('assert');
+const { chromium } = require('playwright');
+const path = require('path');
+const { URL, pastaResultados, registrar, encerrar } = require('./_comum');
+const RES = pastaResultados('agua'); const assert = require('assert');
 (async () => {
-  const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
+  const b = registrar(await chromium.launch()); const p = await b.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
   const erros = []; p.on('pageerror', (e) => erros.push(e.message)); p.on('dialog', (d) => d.accept());
-  await p.goto('http://127.0.0.1:8765/index.html'); const txt = async (sel) => (await p.locator(sel).first().innerText()).replace(/\s+/g, ' ').trim();
+  await p.goto(URL); const txt = async (sel) => (await p.locator(sel).first().innerText()).replace(/\s+/g, ' ').trim();
   console.log('inicial:', await txt('.agua .value'));
   await p.click('[data-act=agua-mais][data-ml="250"]'); await p.click('[data-act=agua-mais][data-ml="500"]');
   console.log('após 250+500:', await txt('.agua .value'), '|', await txt('.agua .small:not(.label)'));
@@ -20,8 +23,8 @@ const { chromium } = require('playwright'); const assert = require('assert');
   // além da meta: linguagem neutra
   await p.click('[data-act=agua-outro]'); await p.fill('.sheet [name=ml]', '2000'); await p.click('.sheet [data-ok]'); await p.waitForTimeout(100);
   console.log('acima:', await txt('.agua .small:not(.label)'));
-  await p.screenshot({ path: '/tmp/claude-0/-home-user/31289882-dc9d-5eca-88d1-67be19cd3d3b/scratchpad/agua.png' });
+  await p.screenshot({ path: path.join(RES, 'agua.png') });
   await p.reload(); assert((await txt('.agua .value')).startsWith('2.750'));
   await p.click('.tab[data-tab=historico]'); console.log('histórico:', await txt('.hist-row'));
   console.log('erros:', erros); assert.equal(erros.length, 0); await b.close(); console.log('OK');
-})().catch((e) => { console.error(e); process.exit(1); });
+})().then(() => encerrar(0), (e) => { console.error('FALHA', e); return encerrar(1); });

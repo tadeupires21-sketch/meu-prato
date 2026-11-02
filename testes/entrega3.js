@@ -1,11 +1,14 @@
-const { chromium } = require('playwright'); const assert = require('assert'); const fs = require('fs');
+const { chromium } = require('playwright');
+const path = require('path');
+const { URL, pastaResultados, registrar, encerrar } = require('./_comum');
+const RES = pastaResultados('entrega3'); const assert = require('assert'); const fs = require('fs');
 (async () => {
-  const b = await chromium.launch(); const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, acceptDownloads: true }); const p = await ctx.newPage();
+  const b = registrar(await chromium.launch()); const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, acceptDownloads: true }); const p = await ctx.newPage();
   const erros = []; p.on('pageerror', (e) => { erros.push(e.message); console.log('PAGEERROR', e.stack.split('\n').slice(0, 2).join(' <- ')); }); p.on('dialog', (d) => d.accept(d.type() === 'prompt' ? 'Receita X' : undefined));
   const txt = async (sel) => (await p.locator(sel).first().innerText()).replace(/\s+/g, ' ').trim();
-  const SHOT = '/tmp/claude-0/-home-user/31289882-dc9d-5eca-88d1-67be19cd3d3b/scratchpad/';
+  const SHOT = RES + path.sep;
   const hoje = () => p.evaluate(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; });
-  await p.goto('http://127.0.0.1:8765/index.html');
+  await p.goto(URL);
   // 1. usuário novo: sem metas → só consumo
   console.log('kcal sem meta:', await txt('.stat .sub'), '| aviso:', (await txt('.card')).includes('Sem metas')); assert((await txt('.stat .sub')).includes('sem meta definida'));
   await p.click('[data-act=ir-config]'); assert.equal(await p.evaluate(() => MeuPrato.ui.aba), 'config');
@@ -54,4 +57,4 @@ const { chromium } = require('playwright'); const assert = require('assert'); co
   console.log('validação:', v); assert(v[0] && v[1] && v[2]);
   await p.reload(); assert((await txt('.stat .sub')).includes('de 1.900 kcal'));
   console.log('erros:', erros); assert.equal(erros.length, 0); await b.close(); console.log('OK');
-})().catch((e) => { console.error('FALHA', e); process.exit(1); });
+})().then(() => encerrar(0), (e) => { console.error('FALHA', e); return encerrar(1); });

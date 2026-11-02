@@ -1,10 +1,13 @@
-const { chromium } = require('playwright'); const assert = require('assert');
+const { chromium } = require('playwright');
+const path = require('path');
+const { URL, pastaResultados, registrar, encerrar } = require('./_comum');
+const RES = pastaResultados('entrega2'); const assert = require('assert');
 (async () => {
-  const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
+  const b = registrar(await chromium.launch()); const p = await b.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
   const erros = []; p.on('pageerror', (e) => { erros.push(e.message); console.log('PAGEERROR', e.stack.split('\n').slice(0, 3).join(' <- ')); }); const prompts = []; p.on('dialog', (d) => { if (d.type() === 'prompt') { prompts.push(d.message()); d.accept('Meu café'); } else d.accept(); });
   const txt = async (sel) => (await p.locator(sel).first().innerText()).replace(/\s+/g, ' ').trim();
-  const SHOT = '/tmp/claude-0/-home-user/31289882-dc9d-5eca-88d1-67be19cd3d3b/scratchpad/';
-  await p.goto('http://127.0.0.1:8765/index.html'); await p.click('.tab[data-tab=config]'); await p.click('[data-act=importar-base]'); await p.waitForSelector('.sheet [data-ok]'); await p.click('.sheet [data-ok]'); await p.waitForSelector('.list-item'); await p.click('.tab[data-tab=hoje]');
+  const SHOT = RES + path.sep;
+  await p.goto(URL); await p.click('.tab[data-tab=config]'); await p.click('[data-act=importar-base]'); await p.waitForSelector('.sheet [data-ok]'); await p.click('.sheet [data-ok]'); await p.waitForSelector('.list-item'); await p.click('.tab[data-tab=hoje]');
   // 1. seleção em lote: 3 itens, revisar, desmarcar 1, alterar quantidade, confirmar
   await p.click('[data-act=adicionar][data-idx="1"]'); await p.click('.sheet [data-lote]');
   for (const q of ['arroz branco', 'feijao carioca', 'frango']) { await p.fill('.sheet .search', q); await p.click('.sheet [data-act=pick-alimento]'); }
@@ -23,7 +26,7 @@ const { chromium } = require('playwright'); const assert = require('assert');
   await p.click('#toast .toast-acao'); await p.waitForFunction(() => document.querySelectorAll('.meal[data-idx="1"] .entry').length === 0); console.log('desfazer lote ok');
   // registrar de novo (sem toque duplo): refazer rápido
   await p.click('[data-act=adicionar][data-idx="1"]'); await p.click('.sheet [data-lote]'); for (const q of ['arroz branco', 'frango']) { await p.fill('.sheet .search', q); await p.click('.sheet [data-act=pick-alimento]'); }
-  await p.click('.sheet [data-revisar]'); await p.waitForSelector('.sheet [data-ok]'); await p.click('.sheet [data-ok]'); await p.click('.sheet [data-ok]').catch(() => {}); await p.waitForTimeout(150);
+  await p.click('.sheet [data-revisar]'); await p.waitForSelector('.sheet [data-ok]'); await p.click('.sheet [data-ok]'); await p.click('.sheet [data-ok]', { timeout: 1000 }).catch(() => {}); await p.waitForTimeout(150);
   assert.equal(await p.locator('.meal[data-idx="1"] .entry').count(), 2); console.log('sem duplicar por toque repetido ok; última porção do arroz:', await p.evaluate(() => { const D = MeuPrato.dados(); const a = D.alimentos.find(x => x.nome.startsWith('Arroz branco')); return D.porcoes['alimento:' + a.id]; }));
   // 2. salvar como combinação; aplicar via seletor com prévia; cadastro editado reflete; excluído usa snapshot
   await p.click('[data-act=menu-refeicao][data-idx="1"]'); await p.click('.sheet .menu button:has-text("Salvar como combinação")'); await p.waitForTimeout(100);
@@ -51,4 +54,4 @@ const { chromium } = require('playwright'); const assert = require('assert');
   const v = await p.evaluate(() => [MeuPrato.validar(JSON.parse(localStorage.getItem('meuprato.v1'))).ok, MeuPrato.validar({ versao: 1, alimentos: [], receitas: [], dias: {}, combinacoes: [{ id: 'c', nome: 'x', itens: [] }] }).erro]); console.log('validação:', v); assert(v[0] && v[1]);
   console.log('combos antes:', await p.evaluate(() => MeuPrato.dados().combinacoes.map(c => c.nome))); await p.click('[data-act=abrir-combinacao]'); console.log('menu:', await txt('.sheet .menu')); await p.click('.sheet .menu button:has-text("Excluir")'); await p.waitForTimeout(100); console.log('combos depois:', await p.evaluate(() => MeuPrato.dados().combinacoes.map(c => c.nome))); assert.equal(await p.evaluate(() => MeuPrato.dados().combinacoes.length), 0);
   console.log('erros:', erros); assert.equal(erros.length, 0); await b.close(); console.log('OK');
-})().catch((e) => { console.error('FALHA', e); process.exit(1); });
+})().then(() => encerrar(0), (e) => { console.error('FALHA', e); return encerrar(1); });

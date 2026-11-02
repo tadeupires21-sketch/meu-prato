@@ -1,8 +1,11 @@
-const { chromium } = require('playwright'); const assert = require('assert');
+const { chromium } = require('playwright');
+const path = require('path');
+const { URL, pastaResultados, registrar, encerrar } = require('./_comum');
+const RES = pastaResultados('alimentos-base'); const assert = require('assert');
 (async () => {
-  const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 390, height: 844 } });
+  const b = registrar(await chromium.launch()); const p = await b.newPage({ viewport: { width: 390, height: 844 } });
   const erros = []; p.on('pageerror', (e) => erros.push(e.message)); p.on('dialog', (d) => { console.log(d.type(), '|', d.message().replace(/\n/g, ' / ').slice(0, 400)); d.accept(); });
-  await p.goto('http://127.0.0.1:8765/index.html');
+  await p.goto(URL);
   // simula usuário que já importou os 5 antigos sem medidas
   await p.evaluate(() => { const D = MeuPrato.dados(); D.alimentos.push({ id: 'x1', nome: 'Ovo de galinha inteiro, cozido', marca: '', estado: 'cozido', refQtd: 100, refUnidade: 'g', kcal: 146, prot: 13.3, carb: 0.6, gord: 9.5, medidas: [], favorito: false, fonte: 'TACO 4ª ed. (NEPA/Unicamp)' }); D.alimentos.push({ id: 'x2', nome: 'Arroz branco tipo 1, cozido', marca: '', estado: 'cozido', refQtd: 100, refUnidade: 'g', kcal: 128, prot: 2.5, carb: 28.1, gord: 0.2, fibra: null, sodio: null, medidas: [], favorito: false, fonte: 'TACO 4ª ed. (NEPA/Unicamp)' }); localStorage.setItem('meuprato.v1', JSON.stringify(D)); });
   await p.reload(); await p.click('.tab[data-tab=config]'); await p.click('[data-act=importar-base]'); await p.waitForSelector('.sheet [data-ok]'); await p.click('.sheet [data-ok]'); await p.waitForSelector('.list-item');
@@ -20,4 +23,4 @@ const { chromium } = require('playwright'); const assert = require('assert');
   await p.click('.tab[data-tab=alimentos]'); await p.click('[data-act=abrir-alimento]:has-text("Ovo")'); await p.click('.sheet .menu button:has-text("Editar")');
   console.log('obs:', await p.locator('.sheet p.help').nth(1).innerText());
   console.log('erros:', erros); assert.equal(erros.length, 0); await b.close(); console.log('OK');
-})().catch((e) => { console.error(e); process.exit(1); });
+})().then(() => encerrar(0), (e) => { console.error('FALHA', e); return encerrar(1); });

@@ -75,7 +75,7 @@ dependência, sem servidor de dados. Interface em pt-BR, feita para celular (And
 
 ## Testes
 
-### Teste principal (obrigatório antes de publicar)
+Todos os roteiros rodam com um único comando e são obrigatórios antes de publicar.
 
 Requisitos: Node 20 ou mais novo.
 
@@ -85,24 +85,34 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-O comando sobe um servidor local só com Node, espera ele responder, roda `testes/e2e.js` num navegador
-Chromium sem interface e encerra o servidor. Termina com código 0 só se todas as verificações passarem;
-qualquer falha devolve código diferente de zero. Cada execução usa um contexto de navegador novo, com
-armazenamento vazio: não lê nem altera registros reais.
+Para rodar só alguns roteiros, passe os nomes depois de `--`:
 
-Capturas de tela, o backup exportado e, em caso de falha, `falha.png` ficam em `test-results/e2e/`.
+```bash
+npm run test:e2e -- agua recorte1
+```
 
-O que ele verifica: cadastro de alimento e cálculo proporcional (200 kcal e 10 g de proteína por 100 g,
-150 g registram 300 kcal e 15 g), medida sem equivalência recusada, editar/duplicar/excluir consumo,
-alteração do cadastro sem mudar consumos anteriores, receita por porção e por grama, cópia de refeição e
-troca de dia sem mistura, persistência após recarregar, histórico, exportação JSON/CSV, importação inválida
-recusada e válida restaurada, isolamento do modo demonstração, metas, manifest e service worker.
+O comando sobe um servidor local só com Node, espera ele responder e roda os roteiros de `testes/` um a um,
+começando pelo principal (`e2e`). Cada roteiro abre um navegador Chromium próprio, sem interface e com
+armazenamento vazio: nenhum lê ou altera registros reais. No fim, mostra um resumo com o resultado e o tempo
+de cada um. Termina com código 0 só se todos passarem; qualquer falha devolve código diferente de zero.
+Capturas de tela ficam em `test-results/<roteiro>/`; quando um roteiro falha, ele salva `falha.png` ali e
+fecha o navegador.
 
-No GitHub Actions (`.github/workflows/pages.yml`) o teste roda em todo pull request e em todo push na
-`main`. A publicação no Pages depende dele: se o teste falhar, o site continua na última versão boa e o
-log e as capturas ficam no artefato `resultados-e2e` da execução. Só os arquivos do app vão para o site.
+| Roteiro | O que verifica |
+|---|---|
+| `e2e` | Cadastro e cálculo proporcional (200 kcal e 10 g de proteína por 100 g; 150 g dão 300 kcal e 15 g), medida sem equivalência recusada, editar/duplicar/excluir, cadastro alterado sem mudar consumos anteriores, receita por porção e por grama, cópia de refeição e troca de dia, persistência, histórico, JSON/CSV, importação inválida e válida, modo demonstração isolado, metas, manifest e service worker |
+| `agua` | Contador de água: copo, 500 ml, quantidade livre, desfazer, isolamento entre dias, meta e copo, histórico |
+| `alimentos-base` | Lista embutida: importação, medidas sugeridas, itens já cadastrados completados sem sobrescrever, modelo de whey |
+| `codigo-barras` | Leitura por código com Open Food Facts simulado: produto encontrado, reconhecido sem rede, não encontrado, servidor fora do ar, consulta desligada |
+| `recorte1` | Cache offline, busca sem acento, adicionar e continuar, desfazer, última porção, detalhe de macros, escape de HTML, validação de backup, dados corrompidos preservados, falha de gravação |
+| `entrega2` | Seleção em lote, combinações, repetir e copiar com prévia editável, desfazer o lote |
+| `entrega3` | Metas opcionais com vigência, fibras e sódio com “não informado”, receita com dado incompleto, CSV, histórico com denominadores |
+| `recorte3` | Importação seletiva, cadastro por porção do rótulo, sugestões por refeição |
 
-### Outros roteiros
+`testes/_comum.js` reúne o endereço do servidor, a pasta de resultados e o encerramento dos navegadores.
+Arquivos que começam com `_` não são roteiros.
 
-Os demais scripts em `testes/` (recortes e entregas, água, código de barras, alimentos-base) ainda
-esperam um servidor já rodando em `127.0.0.1:8765` e não fazem parte da verificação obrigatória.
+No GitHub Actions (`.github/workflows/pages.yml`) todos os roteiros rodam em todo pull request e em todo
+push na `main`. A publicação no Pages depende deles: se algum falhar, o site continua na última versão boa e
+o log e as capturas ficam no artefato `resultados-e2e` da execução. Só os arquivos do app vão para o site.
+O roteiro de código de barras simula o Open Food Facts; ele não testa a câmera nem a API real.

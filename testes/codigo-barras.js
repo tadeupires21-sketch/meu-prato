@@ -1,6 +1,9 @@
-const { chromium } = require('playwright'); const assert = require('assert');
+const { chromium } = require('playwright');
+const path = require('path');
+const { URL, pastaResultados, registrar, encerrar } = require('./_comum');
+const RES = pastaResultados('codigo-barras'); const assert = require('assert');
 (async () => {
-  const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 390, height: 844 } });
+  const b = registrar(await chromium.launch()); const p = await b.newPage({ viewport: { width: 390, height: 844 } });
   const erros = []; p.on('pageerror', (e) => erros.push(e.message)); p.on('dialog', (d) => d.accept());
   let chamadas = 0, modo = 'ok';
   await p.route('https://world.openfoodfacts.org/**', (route) => {
@@ -9,7 +12,7 @@ const { chromium } = require('playwright'); const assert = require('assert');
     if (modo === '404') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 0 }) });
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 1, product: { product_name: 'Iogurte Natural', brands: 'Marca Y, Grupo Z', quantity: '170 g', serving_size: '170 g', nutriments: { 'energy-kcal_100g': 60, proteins_100g: 4.2, carbohydrates_100g: 5.1, fat_100g: 3 } } }) });
   });
-  await p.goto('http://127.0.0.1:8765/index.html');
+  await p.goto(URL);
   console.log('leitor nativo no headless:', await p.evaluate(() => 'BarcodeDetector' in window));
   // 1. fluxo pela refeição: código novo → OFF → formulário → salvar → quantidade → registro
   await p.click('[data-act=adicionar][data-idx="0"]'); await p.click('.sheet [data-act=pick-codigo]');
@@ -43,4 +46,4 @@ const { chromium } = require('playwright'); const assert = require('assert');
   await p.click('[data-act=ler-codigo]'); await p.fill('.sheet [name=codigo]', '123'); await p.click('.sheet button[type=submit]'); await p.waitForTimeout(100); console.log('curto:', await p.locator('#toast').textContent());
   await p.reload(); assert.equal(await p.evaluate(() => MeuPrato.dados().config.consultarOFF), false);
   console.log('erros:', erros); assert.equal(erros.length, 0); await b.close(); console.log('OK');
-})().catch((e) => { console.error(e); process.exit(1); });
+})().then(() => encerrar(0), (e) => { console.error('FALHA', e); return encerrar(1); });

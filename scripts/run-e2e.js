@@ -1,6 +1,8 @@
-// Executa o teste principal (testes/e2e.js) contra o app servido localmente.
-// Sobe um servidor estático só com Node (sem dependência extra), espera responder, roda o teste,
-// encerra o servidor e devolve o código de saída do teste. Qualquer falha => código diferente de zero.
+// Executa os roteiros de teste (testes/*.js) contra o app servido localmente.
+// Sobe um servidor estático só com Node (sem dependência extra), espera responder, roda os roteiros um a um
+// (cada um com navegador próprio e armazenamento vazio), encerra o servidor e mostra um resumo.
+// Sem argumentos roda todos, começando por e2e; com nomes roda só esses: npm run test:e2e -- agua recorte1
+// Termina com 0 só se todos passarem; qualquer falha => código diferente de zero.
 'use strict';
 const http = require('http');
 const fs = require('fs');
@@ -37,11 +39,27 @@ servidor.listen(PORTA, '127.0.0.1', async () => {
   try {
     await esperarResposta(`${base}/index.html`);
     console.log(`Servidor de teste em ${base}`);
-    codigo = await new Promise((resolve) => {
-      const filho = spawn(process.execPath, [path.join(RAIZ, 'testes', 'e2e.js')], { stdio: 'inherit', env: { ...process.env, BASE_URL: base } });
-      filho.on('exit', (c, sinal) => resolve(c === null ? 1 : c));
-      filho.on('error', (e) => { console.error(e); resolve(1); });
-    });
+    const pasta = path.join(RAIZ, 'testes');
+    const todos = fs.readdirSync(pasta).filter((f) => f.endsWith('.js') && !f.startsWith('_')).map((f) => f.slice(0, -3))
+      .sort((a, b) => (a === 'e2e' ? -1 : b === 'e2e' ? 1 : a.localeCompare(b)));
+    const pedidos = process.argv.slice(2).map((n) => n.replace(/^testes\//, '').replace(/\.js$/, ''));
+    const desconhecidos = pedidos.filter((n) => !todos.includes(n));
+    if (desconhecidos.length) throw new Error(`roteiro(s) inexistente(s): ${desconhecidos.join(', ')}. Disponíveis: ${todos.join(', ')}`);
+    const fila = pedidos.length ? pedidos : todos;
+    const resultados = [];
+    for (const nome of fila) {
+      console.log(`\n━━━ ${nome} ━━━`);
+      const t0 = Date.now();
+      const c = await new Promise((resolve) => {
+        const filho = spawn(process.execPath, [path.join(pasta, nome + '.js')], { stdio: 'inherit', env: { ...process.env, BASE_URL: base } });
+        filho.on('exit', (cod) => resolve(cod === null ? 1 : cod));
+        filho.on('error', (e) => { console.error(e); resolve(1); });
+      });
+      resultados.push({ nome, ok: c === 0, s: ((Date.now() - t0) / 1000).toFixed(1) });
+    }
+    console.log('\nResumo:');
+    for (const r of resultados) console.log(`  ${r.ok ? 'PASSOU' : 'FALHOU'}  ${r.nome.padEnd(16)} ${r.s}s`);
+    codigo = resultados.every((r) => r.ok) ? 0 : 1;
   } catch (e) {
     console.error('Falha ao preparar o teste:', e.message);
   } finally {

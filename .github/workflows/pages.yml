@@ -1,6 +1,6 @@
 name: Testar e publicar no GitHub Pages
-# O teste principal (npm run test:e2e) roda em todo pull request e em todo push na main.
-# A publicação só acontece na main e só depois que o teste passa: falhou, não publica.
+# Todos os roteiros de testes/ (npm run test:e2e) rodam em todo pull request e em todo push na main.
+# A publicação só acontece na main e só depois que todos passam: falhou um, não publica.
 on:
   pull_request:
   push:
@@ -13,9 +13,9 @@ concurrency:
   cancel-in-progress: true
 jobs:
   test:
-    name: Teste principal (e2e)
+    name: Testes (8 roteiros)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -26,7 +26,7 @@ jobs:
         run: npm ci
       - name: Instalar Chromium do Playwright
         run: npx playwright install --with-deps chromium
-      - name: Executar teste
+      - name: Executar todos os roteiros
         run: npm run test:e2e
       - name: Guardar capturas e backup do teste
         if: always()
