@@ -35,7 +35,7 @@ let b;
 
   // Unit test dos cálculos via API exposta
   const calc = await p.evaluate(() => { const a = MeuPrato.dados().alimentos[0]; return { g150: MeuPrato.calc.nutrientesAlimento(a, 150, 'g'), un2: MeuPrato.calc.nutrientesAlimento(a, 2, 'unidade'), dec: MeuPrato.calc.nutrientesAlimento(a, 37.5, 'g') }; });
-  assert.deepEqual([calc.g150.kcal, calc.g150.prot], [301, 15]); assert.deepEqual([calc.un2.kcal, calc.un2.prot], [200, 10]); assert.equal(calc.dec.kcal, 75);
+  assert.deepEqual([calc.g150.kcal, calc.g150.prot], [300, 15]); assert.deepEqual([calc.un2.kcal, calc.un2.prot], [200, 10]); assert.equal(calc.dec.kcal, 75);
   console.log('cálculo proporcional ok:', JSON.stringify(calc.g150));
   const semMedida = await p.evaluate(() => { try { MeuPrato.calc.nutrientesAlimento(MeuPrato.dados().alimentos[0], 1, 'colher'); return 'calculou'; } catch (e) { return e.message; } });
   console.log('medida sem equivalência:', semMedida); assert(semMedida.includes('sem equivalência'));
