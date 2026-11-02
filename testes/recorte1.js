@@ -8,9 +8,9 @@ const RES = pastaResultados('recorte1'); const assert = require('assert');
   const txt = async (sel) => (await p.locator(sel).first().innerText()).replace(/\s+/g, ' ').trim();
   await p.goto(URL);
   // service worker real: cache com os arquivos
-  await p.waitForFunction(async () => (await caches.keys()).includes('meu-prato-v17') && (await (await caches.open('meu-prato-v17')).keys()).length >= 5, null, { timeout: 15000 }).catch(async () => console.log('SW estado:', await p.evaluate(async () => { const r = await navigator.serviceWorker.getRegistration(); return r ? [r.installing?.state, r.waiting?.state, r.active?.state].join('/') : 'sem registro'; })));
-  const cached = await p.evaluate(async () => (await (await caches.open('meu-prato-v17')).keys()).map(r => r.url.split('/').pop()));
-  console.log('cache SW:', cached.join(', ')); assert(cached.includes('app.js') && cached.includes('styles.css'));
+  await p.waitForFunction(async () => (await caches.keys()).includes('meu-prato-v18') && (await (await caches.open('meu-prato-v18')).keys()).length >= 5, null, { timeout: 15000 }).catch(async () => console.log('SW estado:', await p.evaluate(async () => { const r = await navigator.serviceWorker.getRegistration(); return r ? [r.installing?.state, r.waiting?.state, r.active?.state].join('/') : 'sem registro'; })));
+  const cached = await p.evaluate(async () => (await (await caches.open('meu-prato-v18')).keys()).map(r => r.url.split('/').pop()));
+  console.log('cache SW:', cached.join(', ')); assert(cached.includes('main.js') && cached.includes('calculos.js') && cached.includes('styles.css'));
   // 1. busca sem acento, ordem livre, nome antes de marca
   await p.click('.tab[data-tab=config]'); await p.click('[data-act=importar-base]'); await p.waitForSelector('.sheet [data-ok]'); await p.click('.sheet [data-ok]'); await p.waitForSelector('.list-item');
   await p.evaluate(() => { const D = MeuPrato.dados(); D.alimentos.push({ id: 'mk', nome: 'Biscoito água e sal', marca: 'Pão de Açúcar', refQtd: 100, refUnidade: 'g', kcal: 400, prot: 9, carb: 70, gord: 10, medidas: [], favorito: false }); localStorage.setItem('meuprato.v1', JSON.stringify(D)); });

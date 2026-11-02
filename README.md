@@ -2,7 +2,7 @@
 
 Publicado em https://tadeupires21-sketch.github.io/meu-prato/ (GitHub Pages, workflow em `.github/workflows/pages.yml`).
 
-App estático: `index.html` + `styles.css` + `app.js` + `sw.js` + `manifest.webmanifest`. Sem build, sem
+App estático: `index.html` + `styles.css` + módulos ES em `js/` + `sw.js` + `manifest.webmanifest`. Sem build, sem
 dependência, sem servidor de dados. Interface em pt-BR, feita para celular (Android primeiro).
 
 ## Como usar
@@ -73,9 +73,30 @@ dependência, sem servidor de dados. Interface em pt-BR, feita para celular (And
 - Se os dados salvos estiverem ilegíveis ao abrir, o app preserva o conteúdo original à parte e avisa em
   Ajustes, com botão para baixá-lo; nada é sobrescrito. Falha ao gravar mostra um banner persistente.
 
+## Estrutura do código
+
+Módulos ES nativos em `js/`, carregados por `index.html` sem etapa de build. Por isso o app precisa ser
+servido por HTTP(S); abrir o `index.html` direto do disco (`file://`) não funciona.
+
+| Módulo | Responsabilidade |
+|---|---|
+| `main.js` | Ponto de entrada: eventos globais, inicialização, service worker |
+| `nutrientes.js` | Definição central dos nutrientes (unidade, casas decimais, obrigatório ou opcional) |
+| `alimentos-base.js` | Lista embutida da TACO/TBCA e modelos (dados, sem lógica) |
+| `calculos.js` | Cálculos proporcionais, somas com cobertura e receitas. Puro: não lê estado nem tela |
+| `estado.js` | Persistência no `localStorage`, validação de dados e backup, documento atual `D` |
+| `dominio.js` | Dias, metas com vigência, histórico, porções lembradas, combinações e lista embutida |
+| `off.js` | Consulta ao Open Food Facts e conversão para o formato do app |
+| `backup.js`, `demo.js` | Exportação/importação e modo demonstração |
+| `util.js`, `dom.js` | Datas, números, busca; seletores, avisos e confirmações |
+| `ui.js` | Telas e folhas da interface |
+
+O documento de dados `D` é lido por todos e só é trocado inteiro por `definirD()`. `js/package.json`
+marca a pasta como módulos ES para o Node, o que permite testar `calculos.js` sem navegador.
+
 ## Testes
 
-Todos os roteiros rodam com um único comando e são obrigatórios antes de publicar.
+Todos os roteiros (oito no navegador e um de cálculos sem navegador) rodam com um único comando e são obrigatórios antes de publicar.
 
 Requisitos: Node 20 ou mais novo.
 
@@ -100,6 +121,7 @@ fecha o navegador.
 
 | Roteiro | O que verifica |
 |---|---|
+| `calculos` | Sem navegador: proporcionalidade, decimal, medida caseira e medida recusada, “não informado” × zero, cobertura das somas, receitas por porção e por grama, ingrediente editado e excluído |
 | `e2e` | Cadastro e cálculo proporcional (200 kcal e 10 g de proteína por 100 g; 150 g dão 300 kcal e 15 g), medida sem equivalência recusada, editar/duplicar/excluir, cadastro alterado sem mudar consumos anteriores, receita por porção e por grama, cópia de refeição e troca de dia, persistência, histórico, JSON/CSV, importação inválida e válida, modo demonstração isolado, metas, manifest e service worker |
 | `agua` | Contador de água: copo, 500 ml, quantidade livre, desfazer, isolamento entre dias, meta e copo, histórico |
 | `alimentos-base` | Lista embutida: importação, medidas sugeridas, itens já cadastrados completados sem sobrescrever, modelo de whey |

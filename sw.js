@@ -1,8 +1,9 @@
 // Service worker: guarda a "casca" do app para abrir offline.
 // Ao mudar qualquer arquivo, suba a versão para que o cache antigo seja descartado.
-const VERSAO = 'meu-prato-v17';
+const VERSAO = 'meu-prato-v18';
 const ARQUIVOS = [
-  './', './index.html', './styles.css', './app.js', './manifest.webmanifest',
+  './', './index.html', './styles.css', './manifest.webmanifest',
+  './js/alimentos-base.js', './js/backup.js', './js/calculos.js', './js/demo.js', './js/dom.js', './js/dominio.js', './js/estado.js', './js/main.js', './js/nutrientes.js', './js/off.js', './js/ui.js', './js/util.js',
   './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png'
 ];
 self.addEventListener('install', (e) => {
