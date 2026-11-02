@@ -6,6 +6,7 @@
   fibra; Tabela 2: sódio). a maior parte dos itens vem daí, com nome TACO mapeado no gerador.
 - **TBCA** (USP/FoRC), fichas BRC0031E (tilápia filé cru), BRC0486E (grelhado sem óleo e sem sal) e BRC0488E
   (grelhado com óleo de soja, sem sal). Energia informada em kJ; kcal = kJ ÷ 4,184.
+- **TBCA**, pizza: BRC0225A (muçarela, artesanal, assada) e BRC0685A (marguerita). A TACO não tem pizza.
 - **TBCA**, bolo de chocolate caseiro: BRC0460A (sem recheio), BRC1000A (com cobertura), BRC1008A (recheio de brigadeiro e cobertura). O industrializado vem da TACO, linha 16.
 - **TBCA**, clara de ovo crua: BRC0005J (a cozida vem da TACO, linha 486).
 - **TBCA**, ovo mexido: BRC0065J (sem óleo e sem sal), BRC0027J (com margarina e sal), BRC0062J (com óleo de soja e sal).
