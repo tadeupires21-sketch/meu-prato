@@ -9,7 +9,7 @@ const RES = pastaResultados('recorte1'); const assert = require('assert');
   await p.goto(URL);
   // service worker real: cache com os arquivos
   // Espera real pelo cache do service worker. (waitForFunction com função async não espera: a Promise é "verdadeira".)
-  const lerCache = () => p.evaluate(async () => { if (!(await caches.keys()).includes('meu-prato-v18')) return []; return (await (await caches.open('meu-prato-v18')).keys()).map((r) => r.url.split('/').pop()); });
+  const lerCache = () => p.evaluate(async () => { if (!(await caches.keys()).includes('meu-prato-v19')) return []; return (await (await caches.open('meu-prato-v19')).keys()).map((r) => r.url.split('/').pop()); });
   let cached = []; for (let t = 0; t < 150 && !(cached.includes('main.js') && cached.includes('calculos.js') && cached.includes('styles.css')); t++) { cached = await lerCache(); if (!cached.length || !cached.includes('main.js')) await p.waitForTimeout(100); }
   console.log('cache SW:', cached.join(', ')); assert(cached.includes('main.js') && cached.includes('calculos.js') && cached.includes('styles.css'));
   // 1. busca sem acento, ordem livre, nome antes de marca
