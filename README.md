@@ -58,7 +58,7 @@ dependência, sem servidor de dados. Interface em pt-BR, feita para celular (And
 
 - Dados ficam só neste aparelho e navegador: limpar dados do site, trocar de celular ou desinstalar apaga
   tudo. Exporte o backup com frequência.
-- Única lista embutida: 110 alimentos comuns, com energia, macros, **fibras e sódio lidos direto do PDF oficial da
+- Única lista embutida: 114 alimentos comuns, com energia, macros, **fibras e sódio lidos direto do PDF oficial da
   TACO 4ª ed.** (NEPA/Unicamp), conferidos item a item; tilápia (crua e grelhada) purê de batata, ovo mexido, clara crua, bolos caseiros e pizza vêm das fichas da TBCA/USP e
   está marcada com o código; leite líquido não existe na TACO e está marcado como média de tabelas com valores por 100 g copiados da TACO 4ª ed. (NEPA/Unicamp),
   opcionais, marcados com a fonte e editáveis. Medidas por unidade (ovo 50 g, banana 65 g, fatia de pão
