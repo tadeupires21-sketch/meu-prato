@@ -12,6 +12,8 @@
 - **TBCA**, clara de ovo crua: BRC0005J (a cozida vem da TACO, linha 486).
 - **TBCA**, ovo mexido: BRC0065J (sem óleo e sem sal), BRC0027J (com margarina e sal), BRC0062J (com óleo de soja e sal).
 - **TBCA**, purê de batata: BRC1195B (com manteiga e sal) e BRC0323B (com margarina e sal), receitas-padrão.
+- **Hambúrguer de alcatra**: TACO não tem; usa o miolo de alcatra sem gordura (linhas 369 e 370). O industrializado
+  é a linha 417 (fibra “*” na TACO, sódio 1090 mg).
 - **Leite de vaca integral**: a TACO não traz leite líquido (linhas com asterisco). Valores médios de outras
   tabelas, por 100 ml, marcados como tal. Prefira o rótulo.
 - **Azeite de oliva extra virgem**: TACO linha 260 (884 kcal, 100 g lipídeos; fibra e sódio “NA”).
