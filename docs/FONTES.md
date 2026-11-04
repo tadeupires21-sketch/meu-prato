@@ -14,6 +14,8 @@
 - **TBCA**, purê de batata: BRC1195B (com manteiga e sal) e BRC0323B (com margarina e sal), receitas-padrão.
 - **Hambúrguer de alcatra**: TACO não tem; usa o miolo de alcatra sem gordura (linhas 369 e 370). O industrializado
   é a linha 417 (fibra “*” na TACO, sódio 1090 mg).
+- **Açaí**: TACO linhas 167 (com xarope de guaraná e glucose) e 168 (polpa congelada); medidas de pote pela
+  equivalência da TBCA BRC0095C (copo de 240 ml = 240 g); com granola e mel da TBCA BRC0177C (unidade de 200 g).
 - **Leite de vaca integral**: a TACO não traz leite líquido (linhas com asterisco). Valores médios de outras
   tabelas, por 100 ml, marcados como tal. Prefira o rótulo.
 - **Azeite de oliva extra virgem**: TACO linha 260 (884 kcal, 100 g lipídeos; fibra e sódio “NA”).
