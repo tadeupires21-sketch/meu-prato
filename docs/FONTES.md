@@ -18,6 +18,8 @@
   equivalência da TBCA BRC0095C (copo de 240 ml = 240 g); com granola e mel da TBCA BRC0177C (unidade de 200 g).
 - **Coxa de frango**: TACO linhas 396 a 399; unidade das versões prontas pelas medidas caseiras da TBCA
   (BRC0108F assada com pele, 75 g; BRC0109F cozida sem pele, 60 g).
+- **Peito de frango desfiado**: TACO linha 408 (peito sem pele cozido).
+- **Queijo coalho**: TBCA BRC0048G (pedaço de 50 g) e BRC0139G (espeto grelhado, 80 g). A TACO não tem.
 - **Leite de vaca integral**: a TACO não traz leite líquido (linhas com asterisco). Valores médios de outras
   tabelas, por 100 ml, marcados como tal. Prefira o rótulo.
 - **Azeite de oliva extra virgem**: TACO linha 260 (884 kcal, 100 g lipídeos; fibra e sódio “NA”).
