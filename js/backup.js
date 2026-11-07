@@ -8,26 +8,33 @@ function nomeBackup() { return `meu-prato-backup-${hojeISO()}${modoDemo() ? '-de
 function conteudoBackup() { return JSON.stringify({ ...D, exportadoEm: new Date().toISOString(), app: 'Meu Prato' }, null, 2); }
 export function exportarJSON() { baixar(nomeBackup(), conteudoBackup(), 'application/json'); toast('Backup gerado.'); }
 // Abre a tela de compartilhamento do sistema com o arquivo (no Android, o Drive aparece ali).
-// Onde o navegador não compartilha arquivos, cai no download, como o "Exportar".
-export function podeCompartilharArquivo() {
-  try { return !!(navigator.canShare && navigator.share && navigator.canShare({ files: [new File(['{}'], 'teste.json', { type: 'application/json' })] })); } catch { return false; }
+// O Chrome só compartilha alguns tipos de arquivo (texto, imagem, áudio, vídeo, PDF) e no Android recusa .json.
+// Por isso pergunta ao navegador: tenta .json e, se recusado, o mesmo conteúdo como .txt. A importação aceita os dois.
+function arquivoCompartilhavel(conteudo) {
+  const base = nomeBackup().replace(/\.json$/, '');
+  const candidatos = [new File([conteudo], base + '.json', { type: 'application/json' }), new File([conteudo], base + '.txt', { type: 'text/plain' })];
+  try { if (navigator.canShare && navigator.share) return candidatos.find((f) => navigator.canShare({ files: [f] })) || null; } catch { /* sem suporte */ }
+  return null;
 }
+export function podeCompartilharArquivo() { return !!arquivoCompartilhavel('{}'); }
 export async function compartilharBackup() {
-  const arquivo = new File([conteudoBackup()], nomeBackup(), { type: 'application/json' });
-  if (podeCompartilharArquivo()) {
+  const conteudo = conteudoBackup();
+  const arquivo = arquivoCompartilhavel(conteudo);
+  if (arquivo) {
     try {
       await navigator.share({ files: [arquivo], title: 'Backup do Meu Prato', text: `Backup do Meu Prato de ${hojeISO().split('-').reverse().join('/')}.` });
-      toast('Backup enviado para compartilhar.');
+      toast(arquivo.name.endsWith('.txt') ? 'Backup compartilhado como .txt (o Android não aceita .json); a importação aceita esse arquivo.' : 'Backup enviado para compartilhar.');
       return 'compartilhado';
     } catch (e) {
       if (e && e.name === 'AbortError') { toast('Compartilhamento cancelado.'); return 'cancelado'; }
       console.warn('share falhou, baixando', e);
     }
   }
-  baixar(arquivo.name, await arquivo.text(), 'application/json');
+  baixar(nomeBackup(), conteudo, 'application/json');
   toast('Este navegador não compartilha arquivos: o backup foi baixado. Envie-o ao Drive pelo app de arquivos.');
   return 'baixado';
 }
+
 export function exportarCSV() {
   const linhas = [['data', 'refeicao', 'alimento', 'tipo', 'quantidade', 'unidade', 'kcal', 'proteina_g', 'carboidrato_g', 'gordura_g', 'fibra_g', 'sodio_mg', 'dia_concluido']];
   const opc = (v, d) => v == null ? '' : v.toFixed(d); // vazio = não informado

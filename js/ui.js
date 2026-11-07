@@ -216,7 +216,7 @@ export function telaConfig() {
       <button class="btn primary full" data-act="compartilhar-backup">Compartilhar backup (Drive, e-mail…)</button>
       <button class="btn full" data-act="exportar-json">Exportar backup (JSON)</button>
       <button class="btn full" data-act="importar-json">Importar backup (JSON)</button>
-      <input type="file" accept="application/json,.json" data-act="arquivo-json" hidden>
+      <input type="file" accept="application/json,.json,text/plain,.txt" data-act="arquivo-json" hidden>
       <button class="btn full" data-act="exportar-csv">Exportar histórico alimentar (CSV)</button>
     </div>
   </section>

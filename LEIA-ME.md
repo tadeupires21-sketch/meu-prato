@@ -52,7 +52,8 @@ dependência, sem servidor de dados. Interface em pt-BR, feita para celular (And
 - Cada registro guarda os nutrientes já calculados: editar ou excluir um alimento/receita depois **não**
   altera dias anteriores.
 - Backup: Ajustes → **Compartilhar backup** abre a tela de compartilhamento do celular com o arquivo (no Android,
-  escolha Drive, Gmail etc.); onde o navegador não compartilha arquivos, o mesmo botão baixa o backup.
+  escolha Drive, Gmail etc.). O Chrome do Android não compartilha .json, então o arquivo vai como .txt, com o mesmo
+  conteúdo; a importação aceita .json e .txt. Onde o navegador não compartilha arquivos, o botão baixa o backup.
   Também há Exportar JSON / Importar JSON (valida e pede confirmação antes de substituir) /
   Exportar CSV (`;` e vírgula decimal, abre direto no Excel pt-BR).
 
@@ -131,7 +132,7 @@ fecha o navegador.
 | `recorte1` | Cache offline, busca sem acento, adicionar e continuar, desfazer, última porção, detalhe de macros, escape de HTML, validação de backup, dados corrompidos preservados, falha de gravação |
 | `entrega2` | Seleção em lote, combinações, repetir e copiar com prévia editável, desfazer o lote |
 | `entrega3` | Metas opcionais com vigência, fibras e sódio com “não informado”, receita com dado incompleto, CSV, histórico com denominadores |
-| `compartilhar` | Botão de compartilhar backup: arquivo certo e reimportável, cancelamento sem download, download quando o navegador não compartilha |
+| `compartilhar` | Botão de compartilhar backup: arquivo certo e reimportável, .txt quando o .json é recusado (Android) e reimportado, cancelamento sem download, download quando o navegador não compartilha |
 | `recorte3` | Importação seletiva, cadastro por porção do rótulo, sugestões por refeição |
 
 `testes/_comum.js` reúne o endereço do servidor, a pasta de resultados e o encerramento dos navegadores.

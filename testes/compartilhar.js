@@ -12,7 +12,8 @@ pastaResultados('compartilhar');
     await ctx.addInitScript((m) => {
       window.__compartilhado = null;
       if (m === 'sem') { delete Navigator.prototype.share; delete Navigator.prototype.canShare; Object.defineProperty(navigator, 'share', { value: undefined }); Object.defineProperty(navigator, 'canShare', { value: undefined }); return; }
-      navigator.canShare = (d) => !!(d && d.files && d.files.length);
+      // "android" imita o Chrome do Android: recusa .json e aceita texto.
+      navigator.canShare = (d) => !!(d && d.files && d.files.length) && (m !== 'android' || d.files.every((f) => f.type === 'text/plain' && f.name.endsWith('.txt')));
       navigator.share = async (d) => {
         if (m === 'cancela') throw new DOMException('cancelado', 'AbortError');
         const f = d.files[0]; window.__compartilhado = { nome: f.name, tipo: f.type, titulo: d.title, conteudo: await f.text() };
@@ -33,6 +34,19 @@ pastaResultados('compartilhar');
   const valido = await p.evaluate((s) => { const o = JSON.parse(s); return { v: MeuPrato.validar(o), agua: Object.values(o.dias).flatMap((d) => d.agua || []).reduce((a, x) => a + x.ml, 0), app: o.app }; }, c.conteudo);
   console.log('compartilhado:', c.nome, c.tipo, c.titulo, '| validação:', JSON.stringify(valido.v), '| água no arquivo:', valido.agua, '| toast:', await txt(p, '#toast'));
   assert.match(c.nome, /^meu-prato-backup-\d{4}-\d{2}-\d{2}\.json$/); assert.equal(c.tipo, 'application/json'); assert.ok(valido.v.ok); assert.equal(valido.agua, 250); assert.equal(valido.app, 'Meu Prato'); assert.equal(downloads, 0);
+  assert.deepEqual(erros, []);
+
+  // 1b. Android: .json recusado → compartilha .txt com o mesmo conteúdo, e esse .txt é reimportável pela tela
+  ({ p, erros } = await abrir('android'));
+  await p.click('[data-act=agua-mais][data-ml="500"]'); await p.click('.tab[data-tab=config]');
+  await p.click('[data-act=compartilhar-backup]'); await p.waitForFunction(() => window.__compartilhado);
+  const ca = await p.evaluate(() => window.__compartilhado);
+  console.log('android:', ca.nome, ca.tipo, '| toast:', await txt(p, '#toast'));
+  assert.match(ca.nome, /^meu-prato-backup-\d{4}-\d{2}-\d{2}\.txt$/); assert.equal(ca.tipo, 'text/plain'); assert.ok(await p.evaluate((s) => MeuPrato.validar(JSON.parse(s)).ok, ca.conteudo));
+  assert.equal(await p.getAttribute('[data-act=arquivo-json]', 'accept'), 'application/json,.json,text/plain,.txt');
+  await p.click('[data-act=apagar-tudo]'); await p.click('.tab[data-tab=hoje]'); assert.ok((await txt(p, '.agua .value')).startsWith('0'));
+  await p.click('.tab[data-tab=config]'); await p.setInputFiles('[data-act=arquivo-json]', { name: ca.nome, mimeType: 'text/plain', buffer: Buffer.from(ca.conteudo) }); await p.waitForTimeout(300);
+  await p.click('.tab[data-tab=hoje]'); console.log('após importar o .txt:', await txt(p, '.agua .value')); assert.ok((await txt(p, '.agua .value')).startsWith('500'));
   assert.deepEqual(erros, []);
 
   // 2. cancelado: nada é baixado, aviso de cancelamento
