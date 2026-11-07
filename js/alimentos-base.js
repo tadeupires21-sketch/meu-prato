@@ -80,6 +80,8 @@ export const ALIMENTOS_BASE = [
   { nome: 'Beterraba, cozida', estado: 'cozido', kcal: 32, prot: 1.3, carb: 7.2, gord: 0.1, fibra: 1.9, sodio: 23 },
   { nome: 'Chuchu, cozido', estado: 'cozido', kcal: 19, prot: 0.4, carb: 4.8, gord: 0, fibra: 1, sodio: 2 },
   { nome: 'Pepino, cru', estado: 'cru', kcal: 10, prot: 0.9, carb: 2, gord: 0, fibra: 1.1, sodio: 0 },
+  { nome: 'Champignon em conserva, drenado', estado: 'cozido', kcal: 40, prot: 2.63, carb: 7.29, gord: 0.56, fibra: 2.25, sodio: null, medidas: [{ nome: 'colher de servir cheia', equivale: 45 }], fonte: 'TBCA (USP) BRC0701B, aproximação', obs: 'Nem TACO nem TBCA têm champignon em conserva. Valores do champignon (cogumelo Paris) cozido sem sal, que é como ele vai para o vidro; sódio fica como não informado porque a salmoura soma bastante sal e varia por marca. O rótulo do vidro (ou o leitor de código de barras) é mais preciso. Pese escorrido.' },
+  { nome: 'Champignon fresco, cru', estado: 'cru', kcal: 27, prot: 1.88, carb: 4.81, gord: 0.4, fibra: 1.61, sodio: 2.76, medidas: [{ nome: 'colher de sopa rasa', equivale: 20 }], fonte: 'TBCA (USP) BRC0698B', obs: 'Cogumelo Paris (champignon) in natura; TBCA informa 114 kJ por 100 g e colher de sopa rasa de 20 g.' },
   { nome: 'Cebola, crua', estado: 'cru', kcal: 39, prot: 1.7, carb: 8.9, gord: 0.1, fibra: 2.2, sodio: 1 },
   { nome: 'Milho verde enlatado, drenado', estado: 'na', kcal: 98, prot: 3.2, carb: 17.1, gord: 2.4, fibra: 4.6, sodio: 260 },
   { nome: 'Feijão fradinho, cozido', estado: 'cozido', kcal: 78, prot: 5.1, carb: 13.5, gord: 0.6, fibra: 7.5, sodio: 1 },
