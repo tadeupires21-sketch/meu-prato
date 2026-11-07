@@ -213,6 +213,7 @@ export function telaConfig() {
     <p class="help">Tudo fica salvo <b>somente neste aparelho e neste navegador</b> (armazenamento local, ~${usoKB} KB em uso). Não há conta nem envio para servidor. Isso significa: trocar de celular, limpar os dados do navegador ou desinstalar o app apaga os registros. Faça backup em JSON com alguma frequência.</p>
     ${brutoCorrompido() ? `<div class="help" style="background:var(--warn-soft);padding:10px;border-radius:10px"><b>Dados anteriores preservados.</b> O conteúdo salvo antes estava ilegível${UI.dadosCorrompidos ? ` (${esc(UI.dadosCorrompidos.erro)})` : ''} e foi guardado à parte, sem ser apagado. Baixe-o para tentar recuperar; depois, se quiser, descarte.<div class="row" style="margin-top:8px"><button class="btn sm grow" data-act="baixar-corrompido">Baixar dados brutos</button><button class="btn sm danger" data-act="descartar-corrompido">Descartar</button></div></div>` : ''}
     <div class="stack">
+      <button class="btn primary full" data-act="compartilhar-backup">Compartilhar backup (Drive, e-mail…)</button>
       <button class="btn full" data-act="exportar-json">Exportar backup (JSON)</button>
       <button class="btn full" data-act="importar-json">Importar backup (JSON)</button>
       <input type="file" accept="application/json,.json" data-act="arquivo-json" hidden>

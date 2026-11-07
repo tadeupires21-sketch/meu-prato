@@ -51,7 +51,9 @@ dependência, sem servidor de dados. Interface em pt-BR, feita para celular (And
   totalmente separado.
 - Cada registro guarda os nutrientes já calculados: editar ou excluir um alimento/receita depois **não**
   altera dias anteriores.
-- Backup: Ajustes → Exportar JSON / Importar JSON (valida e pede confirmação antes de substituir) /
+- Backup: Ajustes → **Compartilhar backup** abre a tela de compartilhamento do celular com o arquivo (no Android,
+  escolha Drive, Gmail etc.); onde o navegador não compartilha arquivos, o mesmo botão baixa o backup.
+  Também há Exportar JSON / Importar JSON (valida e pede confirmação antes de substituir) /
   Exportar CSV (`;` e vírgula decimal, abre direto no Excel pt-BR).
 
 ## Limitações desta versão
@@ -96,7 +98,7 @@ marca a pasta como módulos ES para o Node, o que permite testar `calculos.js` s
 
 ## Testes
 
-Todos os roteiros (oito no navegador e um de cálculos sem navegador) rodam com um único comando e são obrigatórios antes de publicar.
+Todos os roteiros (nove no navegador e um de cálculos sem navegador) rodam com um único comando e são obrigatórios antes de publicar.
 
 Requisitos: Node 20 ou mais novo.
 
@@ -129,6 +131,7 @@ fecha o navegador.
 | `recorte1` | Cache offline, busca sem acento, adicionar e continuar, desfazer, última porção, detalhe de macros, escape de HTML, validação de backup, dados corrompidos preservados, falha de gravação |
 | `entrega2` | Seleção em lote, combinações, repetir e copiar com prévia editável, desfazer o lote |
 | `entrega3` | Metas opcionais com vigência, fibras e sódio com “não informado”, receita com dado incompleto, CSV, histórico com denominadores |
+| `compartilhar` | Botão de compartilhar backup: arquivo certo e reimportável, cancelamento sem download, download quando o navegador não compartilha |
 | `recorte3` | Importação seletiva, cadastro por porção do rótulo, sugestões por refeição |
 
 `testes/_comum.js` reúne o endereço do servidor, a pasta de resultados e o encerramento dos navegadores.

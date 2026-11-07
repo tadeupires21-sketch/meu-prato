@@ -4,7 +4,30 @@ import { D, definirD, modoDemo, normalizar, salvar, UI, validarDados } from './e
 import { aguaDia, diaTemRegistro } from './dominio.js';
 import { render } from './ui.js';
 
-export function exportarJSON() { baixar(`meu-prato-backup-${hojeISO()}${modoDemo() ? '-demo' : ''}.json`, JSON.stringify({ ...D, exportadoEm: new Date().toISOString(), app: 'Meu Prato' }, null, 2), 'application/json'); toast('Backup gerado.'); }
+function nomeBackup() { return `meu-prato-backup-${hojeISO()}${modoDemo() ? '-demo' : ''}.json`; }
+function conteudoBackup() { return JSON.stringify({ ...D, exportadoEm: new Date().toISOString(), app: 'Meu Prato' }, null, 2); }
+export function exportarJSON() { baixar(nomeBackup(), conteudoBackup(), 'application/json'); toast('Backup gerado.'); }
+// Abre a tela de compartilhamento do sistema com o arquivo (no Android, o Drive aparece ali).
+// Onde o navegador não compartilha arquivos, cai no download, como o "Exportar".
+export function podeCompartilharArquivo() {
+  try { return !!(navigator.canShare && navigator.share && navigator.canShare({ files: [new File(['{}'], 'teste.json', { type: 'application/json' })] })); } catch { return false; }
+}
+export async function compartilharBackup() {
+  const arquivo = new File([conteudoBackup()], nomeBackup(), { type: 'application/json' });
+  if (podeCompartilharArquivo()) {
+    try {
+      await navigator.share({ files: [arquivo], title: 'Backup do Meu Prato', text: `Backup do Meu Prato de ${hojeISO().split('-').reverse().join('/')}.` });
+      toast('Backup enviado para compartilhar.');
+      return 'compartilhado';
+    } catch (e) {
+      if (e && e.name === 'AbortError') { toast('Compartilhamento cancelado.'); return 'cancelado'; }
+      console.warn('share falhou, baixando', e);
+    }
+  }
+  baixar(arquivo.name, await arquivo.text(), 'application/json');
+  toast('Este navegador não compartilha arquivos: o backup foi baixado. Envie-o ao Drive pelo app de arquivos.');
+  return 'baixado';
+}
 export function exportarCSV() {
   const linhas = [['data', 'refeicao', 'alimento', 'tipo', 'quantidade', 'unidade', 'kcal', 'proteina_g', 'carboidrato_g', 'gordura_g', 'fibra_g', 'sodio_mg', 'dia_concluido']];
   const opc = (v, d) => v == null ? '' : v.toFixed(d); // vazio = não informado

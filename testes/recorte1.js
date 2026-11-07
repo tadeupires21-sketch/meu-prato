@@ -1,6 +1,8 @@
 const { chromium } = require('playwright');
 const path = require('path');
 const { URL, pastaResultados, registrar, encerrar } = require('./_comum');
+// Nome do cache lido do próprio sw.js: subir a versão não exige mexer neste teste.
+const VERSAO_SW = require('fs').readFileSync(require('path').join(__dirname, '..', 'sw.js'), 'utf8').match(/const VERSAO = '([^']+)'/)[1];
 const RES = pastaResultados('recorte1'); const assert = require('assert');
 (async () => {
   const b = registrar(await chromium.launch()); const ctx = await b.newContext({ viewport: { width: 390, height: 844 } }); const p = await ctx.newPage();
@@ -9,7 +11,7 @@ const RES = pastaResultados('recorte1'); const assert = require('assert');
   await p.goto(URL);
   // service worker real: cache com os arquivos
   // Espera real pelo cache do service worker. (waitForFunction com função async não espera: a Promise é "verdadeira".)
-  const lerCache = () => p.evaluate(async () => { if (!(await caches.keys()).includes('meu-prato-v26')) return []; return (await (await caches.open('meu-prato-v26')).keys()).map((r) => r.url.split('/').pop()); });
+  const lerCache = () => p.evaluate(async (v) => { if (!(await caches.keys()).includes(v)) return []; return (await (await caches.open(v)).keys()).map((r) => r.url.split('/').pop()); }, VERSAO_SW);
   let cached = []; for (let t = 0; t < 150 && !(cached.includes('main.js') && cached.includes('calculos.js') && cached.includes('styles.css')); t++) { cached = await lerCache(); if (!cached.length || !cached.includes('main.js')) await p.waitForTimeout(100); }
   console.log('cache SW:', cached.join(', ')); assert(cached.includes('main.js') && cached.includes('calculos.js') && cached.includes('styles.css'));
   // 1. busca sem acento, ordem livre, nome antes de marca

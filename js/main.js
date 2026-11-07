@@ -14,7 +14,7 @@ import { $, confirmar, mostrarBannerErro, toast } from './dom.js';
 import { nutrientesAlimento, nutrientesReceita, totaisReceita } from './calculos.js';
 import { brutoCorrompido, carregar, chaveAtual, D, dadosVazios, definirD, salvar, UI, validarDados } from './estado.js';
 import { obterDia, temAlgumaMeta } from './dominio.js';
-import { exportarCSV, exportarJSON, importarJSON } from './backup.js';
+import { compartilharBackup, exportarCSV, exportarJSON, importarJSON } from './backup.js';
 import { alternarDemo } from './demo.js';
 import { abrirSeletor, fecharFolha, folhaAgua, folhaAlimento, folhaCodigo, folhaDetalheDia, folhaImportarBase, folhaItem, folhaReceita, menuAlimento, menuCombinacao, menuReceita, menuRefeicao, novoDeModelo, render, repetirUltima } from './ui.js';
 
@@ -47,6 +47,7 @@ document.addEventListener('click', (e) => {
     'hist-dias': () => { UI.histDias = Number(el.dataset.n); render(); },
     'abrir-dia': () => { UI.data = el.dataset.data; UI.aba = 'hoje'; render(); },
     'exportar-json': exportarJSON,
+    'compartilhar-backup': () => { compartilharBackup(); },
     'baixar-corrompido': () => { const b = brutoCorrompido(); if (b) baixar(`meu-prato-dados-brutos-${hojeISO()}.txt`, b, 'text/plain;charset=utf-8'); },
     'descartar-corrompido': () => { if (!confirmar('Descartar os dados brutos preservados? Baixe antes se ainda não baixou.')) return; try { localStorage.removeItem(chaveAtual() + '.corrompido'); } catch { /* ignore */ } UI.dadosCorrompidos = null; mostrarBannerErro(); render(); },
     'exportar-csv': exportarCSV,
