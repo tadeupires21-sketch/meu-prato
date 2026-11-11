@@ -1,4 +1,4 @@
-import { prepararQuadro } from './leitor.js';
+import { codigoValido, detectarEmImagem, prepararQuadro } from './leitor.js';
 import { NUTR, NUTR_OBRIG, NUTR_OPC, NUTRIENTES } from './nutrientes.js';
 import { ALIMENTOS_BASE, FONTE_TACO, MODELOS_BASE } from './alimentos-base.js';
 import { dataCurta, esc, filtrarOrdenar, fmt, fmtIn, hojeISO, num, pontuarBusca, rotuloData, somarDias, uid } from './util.js';
@@ -814,7 +814,9 @@ export function folhaCodigo(aoEscolher) {
     } catch (e) { console.warn(e); abrirManual({ codigoBarras: codigo }, `${FONTE_OFF} não respondeu. Cadastre pelo rótulo; o código fica salvo.`); }
   };
   abrirFolha(`${cab('Código de barras')}
-    ${temLeitor() ? `<div class="camera"><video playsinline muted autoplay style="width:100%;border-radius:12px;background:#000;aspect-ratio:4/3;object-fit:contain"></video><div class="row cam-ctr" style="margin-top:8px;min-height:0"></div><p class="help cam-msg">Abrindo a câmera…</p></div>`
+    ${temLeitor() ? `<div class="camera"><video playsinline muted autoplay style="width:100%;border-radius:12px;background:#000;aspect-ratio:4/3;object-fit:contain"></video><div class="row cam-ctr" style="margin-top:8px;min-height:0"></div><p class="help cam-msg">Abrindo a câmera…</p><p class="small muted cam-res"></p>
+      <label class="btn full" style="margin-top:4px">📷 Tirar foto do código<input type="file" accept="image/*" capture="environment" data-foto hidden></label>
+      <p class="small muted" style="margin-top:4px">A foto usa o app de câmera do celular, com foco por toque e resolução total: lê melhor códigos pequenos, curvos ou com reflexo.</p></div>`
       : `<p class="help">Este navegador não tem leitor de código embutido (no Android, use o Chrome). Digite o código abaixo.</p>`}
     <form class="row" data-form="codigo"><div class="field grow" style="margin:0"><label>Código (EAN)</label><input name="codigo" inputmode="numeric" pattern="[0-9]*" placeholder="7891234567890" autocomplete="off"></div><button class="btn primary" type="submit" style="align-self:flex-end">Buscar</button></form>
     <p class="help status" aria-live="polite" style="margin-top:10px"></p>
@@ -823,6 +825,23 @@ export function folhaCodigo(aoEscolher) {
     const bd = $('.sheet-backdrop'); const obs = new MutationObserver(() => { if (!document.contains(bd)) { parar(); obs.disconnect(); } }); obs.observe($('#sheet-root'), { childList: true });
     if (!temLeitor()) { $('[name=codigo]', s).focus(); return; }
     const video = $('video', s), msg = $('.cam-msg', s);
+    const lerFoto = async (arquivo) => {
+      parar(); video.srcObject = null;
+      msg.textContent = 'Lendo a foto…';
+      try {
+        const formatosF = (await BarcodeDetector.getSupportedFormats()).filter((f) => ['ean_13', 'ean_8', 'upc_a', 'upc_e'].includes(f));
+        const detF = new BarcodeDetector({ formats: formatosF });
+        const bmp = await createImageBitmap(arquivo); // orientação EXIF já aplicada pelo navegador
+        const r = await detectarEmImagem(detF, bmp, bmp.width, bmp.height);
+        $('.cam-res', s).textContent = `Foto: ${bmp.width}×${bmp.height}`;
+        if (bmp.close) bmp.close();
+        if (r) { msg.textContent = `Lido na foto: ${r.codigo}`; tratar(s, r.codigo); return; }
+        msg.textContent = 'Não consegui ler o código na foto. Tente de novo mais perto, com o código ocupando boa parte da foto e sem reflexo, ou digite os números abaixo.';
+      } catch (e) { console.warn(e); msg.textContent = 'Não foi possível ler a foto. Digite os números abaixo.'; }
+    };
+    $('[data-foto]', s).addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) lerFoto(f); });
+    // Abrir o app de câmera com o vídeo ainda ligado pode disputar a câmera: desliga antes.
+    $('[data-foto]', s).closest('label').addEventListener('click', () => { parar(); });
     try {
       const formatos = (await BarcodeDetector.getSupportedFormats()).filter((f) => ['ean_13', 'ean_8', 'upc_a', 'upc_e'].includes(f));
       if (!formatos.length) throw new Error('sem formatos EAN');
@@ -834,6 +853,8 @@ export function folhaCodigo(aoEscolher) {
       if (encerrado || !s.isConnected) { parar(); return; }
       rodando = true;
       const trilha = stream.getVideoTracks()[0];
+      const st = trilha.getSettings ? trilha.getSettings() : {};
+      if (st.width && st.height) $('.cam-res', s).textContent = `Vídeo da câmera: ${st.width}×${st.height}. Se estiver baixo, use “Tirar foto do código”.`;
       const cap = trilha.getCapabilities ? trilha.getCapabilities() : {};
       const aplicar = (c) => trilha.applyConstraints({ advanced: [c] }).catch(() => {});
       if (Array.isArray(cap.focusMode) && cap.focusMode.includes('continuous')) aplicar({ focusMode: 'continuous' });
@@ -855,7 +876,7 @@ export function folhaCodigo(aoEscolher) {
         if (!rodando) return;
         try { const modo = tentativa++ % 3;
           const fonte = modo === 0 ? video : prepararQuadro(video, canvas, modo === 2);
-          const cods = await det.detect(fonte); if (cods.length && rodando) { msg.textContent = `Lido: ${cods[0].rawValue}`; tratar(s, cods[0].rawValue); return; } } catch { /* quadro inválido */ }
+          const cods = (await det.detect(fonte)).filter((x) => codigoValido(x.rawValue)); if (cods.length && rodando) { msg.textContent = `Lido: ${cods[0].rawValue}`; tratar(s, cods[0].rawValue); return; } } catch { /* quadro inválido */ }
         setTimeout(laco, 120);
       };
       laco();

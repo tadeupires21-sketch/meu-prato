@@ -99,7 +99,7 @@ marca a pasta como módulos ES para o Node, o que permite testar `calculos.js` s
 
 ## Testes
 
-Todos os roteiros (nove no navegador e um de cálculos sem navegador) rodam com um único comando e são obrigatórios antes de publicar.
+Todos os roteiros (dez no navegador e dois sem navegador) rodam com um único comando e são obrigatórios antes de publicar.
 
 Requisitos: Node 20 ou mais novo.
 
@@ -133,6 +133,7 @@ fecha o navegador.
 | `entrega2` | Seleção em lote, combinações, repetir e copiar com prévia editável, desfazer o lote |
 | `entrega3` | Metas opcionais com vigência, fibras e sódio com “não informado”, receita com dado incompleto, CSV, histórico com denominadores |
 | `compartilhar` | Botão de compartilhar backup: arquivo certo e reimportável, .txt quando o .json é recusado (Android) e reimportado, cancelamento sem download, download quando o navegador não compartilha |
+| `leitor-foto` | Botão “Tirar foto do código”: foto com código vertical lida na tentativa girada, leitura com dígito verificador errado descartada (detector e câmera simulados) |
 | `recorte3` | Importação seletiva, cadastro por porção do rótulo, sugestões por refeição |
 
 `testes/_comum.js` reúne o endereço do servidor, a pasta de resultados e o encerramento dos navegadores.
