@@ -1,3 +1,4 @@
+import { prepararQuadro } from './leitor.js';
 import { NUTR, NUTR_OBRIG, NUTR_OPC, NUTRIENTES } from './nutrientes.js';
 import { ALIMENTOS_BASE, FONTE_TACO, MODELOS_BASE } from './alimentos-base.js';
 import { dataCurta, esc, filtrarOrdenar, fmt, fmtIn, hojeISO, num, pontuarBusca, rotuloData, somarDias, uid } from './util.js';
@@ -794,8 +795,8 @@ export function menuReceita(id) {
 
 // Fluxo: código → alimento já cadastrado (callback direto) → consulta OFF → formulário preenchido → callback ao salvar.
 export function folhaCodigo(aoEscolher) {
-  let stream = null, rodando = false;
-  const parar = () => { rodando = false; if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; } };
+  let stream = null, rodando = false, encerrado = false;
+  const parar = () => { encerrado = true; rodando = false; if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; } };
   const tratar = async (s, codigoBruto) => {
     const codigo = normalizarCodigo(codigoBruto);
     if (codigo.length < 8 || codigo.length > 14) { toast('Código inválido: use 8 a 14 dígitos.'); return; }
@@ -813,7 +814,7 @@ export function folhaCodigo(aoEscolher) {
     } catch (e) { console.warn(e); abrirManual({ codigoBarras: codigo }, `${FONTE_OFF} não respondeu. Cadastre pelo rótulo; o código fica salvo.`); }
   };
   abrirFolha(`${cab('Código de barras')}
-    ${temLeitor() ? `<div class="camera"><video playsinline muted autoplay style="width:100%;border-radius:12px;background:#000;aspect-ratio:4/3;object-fit:cover"></video><div class="row cam-ctr" style="margin-top:8px;min-height:0"></div><p class="help cam-msg">Abrindo a câmera…</p></div>`
+    ${temLeitor() ? `<div class="camera"><video playsinline muted autoplay style="width:100%;border-radius:12px;background:#000;aspect-ratio:4/3;object-fit:contain"></video><div class="row cam-ctr" style="margin-top:8px;min-height:0"></div><p class="help cam-msg">Abrindo a câmera…</p></div>`
       : `<p class="help">Este navegador não tem leitor de código embutido (no Android, use o Chrome). Digite o código abaixo.</p>`}
     <form class="row" data-form="codigo"><div class="field grow" style="margin:0"><label>Código (EAN)</label><input name="codigo" inputmode="numeric" pattern="[0-9]*" placeholder="7891234567890" autocomplete="off"></div><button class="btn primary" type="submit" style="align-self:flex-end">Buscar</button></form>
     <p class="help status" aria-live="polite" style="margin-top:10px"></p>
@@ -828,7 +829,10 @@ export function folhaCodigo(aoEscolher) {
       const det = new BarcodeDetector({ formats: formatos });
       // Resolução alta + foco contínuo ajudam em código pequeno; zoom e lanterna quando a câmera oferecer.
       stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
-      video.srcObject = stream; await video.play(); rodando = true;
+      if (encerrado || !s.isConnected) { parar(); return; }
+      video.srcObject = stream; await video.play();
+      if (encerrado || !s.isConnected) { parar(); return; }
+      rodando = true;
       const trilha = stream.getVideoTracks()[0];
       const cap = trilha.getCapabilities ? trilha.getCapabilities() : {};
       const aplicar = (c) => trilha.applyConstraints({ advanced: [c] }).catch(() => {});
@@ -844,15 +848,19 @@ export function folhaCodigo(aoEscolher) {
         let ligada = false; const bt = document.createElement('button'); bt.type = 'button'; bt.className = 'btn sm'; bt.textContent = '🔦 Lanterna';
         bt.addEventListener('click', () => { ligada = !ligada; aplicar({ torch: ligada }); bt.classList.toggle('primary', ligada); }); ctr.append(bt);
       }
-      msg.textContent = 'Aponte a câmera para o código de barras. Código pequeno: aproxime até ele ocupar quase toda a largura' + (cap.zoom ? ' ou use o zoom' : '') + '.';
+      msg.textContent = 'Centralize o código inteiro, com margem nas laterais. Afaste um pouco se estiver desfocado; incline a embalagem para evitar reflexos.' + (cap.zoom ? ' Use o zoom para códigos pequenos.' : '');
+      const canvas = document.createElement('canvas');
+      let tentativa = 0;
       const laco = async () => {
         if (!rodando) return;
-        try { const cods = await det.detect(video); if (cods.length && rodando) { msg.textContent = `Lido: ${cods[0].rawValue}`; tratar(s, cods[0].rawValue); return; } } catch { /* quadro inválido */ }
+        try { const modo = tentativa++ % 3;
+          const fonte = modo === 0 ? video : prepararQuadro(video, canvas, modo === 2);
+          const cods = await det.detect(fonte); if (cods.length && rodando) { msg.textContent = `Lido: ${cods[0].rawValue}`; tratar(s, cods[0].rawValue); return; } } catch { /* quadro inválido */ }
         setTimeout(laco, 120);
       };
       laco();
     } catch (e) {
-      console.warn(e); parar(); $('.camera', s).innerHTML = `<p class="help">Não foi possível usar a câmera (${e.name === 'NotAllowedError' ? 'permissão negada' : 'indisponível'}). Digite o código abaixo.</p>`;
+      console.warn(e); parar(); if (!s.isConnected) return; $('.camera', s).innerHTML = `<p class="help">Não foi possível usar a câmera (${e.name === 'NotAllowedError' ? 'permissão negada' : 'indisponível'}). Digite o código abaixo.</p>`;
       $('[name=codigo]', s).focus();
     }
   });
