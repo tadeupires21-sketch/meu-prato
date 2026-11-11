@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   test:
-    name: Testes (10 roteiros)
+    name: Testes (11 roteiros)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -24,8 +24,10 @@ jobs:
           cache: npm
       - name: Instalar dependências (lockfile)
         run: npm ci
+      # Sem --with-deps: as bibliotecas do Chromium já vêm na imagem do runner, e o apt-get do --with-deps
+      # (só fontes extras) falhou por DNS do espelho do Ubuntu em 11/11/2026, bloqueando a publicação.
       - name: Instalar Chromium do Playwright
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
       - name: Executar todos os roteiros
         run: npm run test:e2e
       - name: Guardar capturas e backup do teste
