@@ -22,6 +22,8 @@
 - **Queijo coalho**: TBCA BRC0048G (pedaço de 50 g) e BRC0139G (espeto grelhado, 80 g). A TACO não tem.
 - **Champignon**: fresco cru da TBCA BRC0698B. Em conserva não existe em nenhuma das tabelas: usa o cozido sem sal
   da TBCA BRC0701B como aproximação, com sódio não informado (a salmoura varia por marca).
+- **Twix**: tabela do rótulo do Twix Caramelo 40 g (Mars), publicada pelo varejista; conferida com outra base (40 g ≈ 196 kcal).
+- **Kebab de carne**: aproximação pela TBCA BRC0844A (pão sírio com carne grelhada e molho de iogurte), unidade de 170 g.
 - **Leite de vaca integral**: a TACO não traz leite líquido (linhas com asterisco). Valores médios de outras
   tabelas, por 100 ml, marcados como tal. Prefira o rótulo.
 - **Azeite de oliva extra virgem**: TACO linha 260 (884 kcal, 100 g lipídeos; fibra e sódio “NA”).
