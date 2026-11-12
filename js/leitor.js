@@ -73,3 +73,18 @@ export async function detectarEmImagem(det, fonte, largura, altura, maxLado = 24
   }
   return null;
 }
+
+// Uma sessão confirma apenas uma vez; vazio, erro ou ambiguidade quebram a sequência.
+export function criarConfirmacaoLeitura() {
+  let anterior = null, encerrada = false;
+  return {
+    cancelar() { encerrada = true; anterior = null; },
+    observar(codigo) {
+      if (encerrada) return null;
+      if (!codigoValido(codigo)) { anterior = null; return null; }
+      if (codigo === anterior) { encerrada = true; return codigo; }
+      anterior = codigo;
+      return null;
+    }
+  };
+}

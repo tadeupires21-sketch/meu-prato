@@ -1,4 +1,4 @@
-import { codigoValido, detectarEmImagem, prepararQuadro } from './leitor.js';
+import { criarConfirmacaoLeitura, codigoValido, detectarEmImagem, prepararQuadro } from './leitor.js';
 import { NUTR, NUTR_OBRIG, NUTR_OPC, NUTRIENTES } from './nutrientes.js';
 import { ALIMENTOS_BASE, FONTE_TACO, MODELOS_BASE } from './alimentos-base.js';
 import { dataCurta, esc, filtrarOrdenar, fmt, fmtIn, hojeISO, num, pontuarBusca, rotuloData, somarDias, uid } from './util.js';
@@ -796,7 +796,8 @@ export function menuReceita(id) {
 // Fluxo: código → alimento já cadastrado (callback direto) → consulta OFF → formulário preenchido → callback ao salvar.
 export function folhaCodigo(aoEscolher) {
   let stream = null, rodando = false, encerrado = false;
-  const parar = () => { encerrado = true; rodando = false; if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; } };
+  const confirmacao = criarConfirmacaoLeitura();
+  const parar = () => { confirmacao.cancelar(); encerrado = true; rodando = false; if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; } };
   const tratar = async (s, codigoBruto) => {
     const codigo = normalizarCodigo(codigoBruto);
     if (codigo.length < 8 || codigo.length > 14) { toast('Código inválido: use 8 a 14 dígitos.'); return; }
@@ -876,7 +877,12 @@ export function folhaCodigo(aoEscolher) {
         if (!rodando) return;
         try { const modo = tentativa++ % 3;
           const fonte = modo === 0 ? video : prepararQuadro(video, canvas, modo === 2);
-          const cods = (await det.detect(fonte)).filter((x) => codigoValido(x.rawValue)); if (cods.length && rodando) { msg.textContent = `Lido: ${cods[0].rawValue}`; tratar(s, cods[0].rawValue); return; } } catch { /* quadro inválido */ }
+          const cods = (await det.detect(fonte)).filter((x) => codigoValido(x.rawValue));
+          if (!rodando || !s.isConnected) { parar(); return; }
+          const unicos = [...new Set(cods.map((x) => x.rawValue))];
+          const codigo = confirmacao.observar(unicos.length === 1 ? unicos[0] : null);
+          if (codigo) { msg.textContent = `Lido: ${codigo}`; tratar(s, codigo); return; }
+        } catch { confirmacao.observar(null); /* quadro inválido quebra a sequência */ }
         setTimeout(laco, 120);
       };
       laco();

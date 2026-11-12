@@ -26,3 +26,5 @@ recupera esse detalhe.
 Validação automatizada (`testes/leitor-foto.js`): detector simulado que só lê a foto girada e devolve
 leitura com dígito errado nas demais; câmera falsa do Chromium. Não mede o decodificador real: a primeira
 validação de verdade é no celular.
+
+A câmera contínua exige o mesmo código válido em duas detecções consecutivas. Quadros sem código, ambíguos ou com erro reiniciam a sequência. Cada sessão confirma uma única vez; fechar o leitor cancela resultados pendentes. Leitura por foto e entrada manual mantêm seu fluxo. Testes de estado cobrem alternância, repetição, interrupção e cancelamento.
