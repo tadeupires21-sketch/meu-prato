@@ -134,6 +134,7 @@ fecha o navegador.
 | `entrega3` | Metas opcionais com vigência, fibras e sódio com “não informado”, receita com dado incompleto, CSV, histórico com denominadores |
 | `compartilhar` | Botão de compartilhar backup: arquivo certo e reimportável, .txt quando o .json é recusado (Android) e reimportado, cancelamento sem download, download quando o navegador não compartilha |
 | `leitor-foto` | Botão “Tirar foto do código”: foto com código vertical lida na tentativa girada, leitura com dígito verificador errado descartada (detector e câmera simulados) |
+| `busca-base` | Busca do registro sugere itens da lista embutida ainda não importados; tocar importa só aquele item (com fonte e observações) e abre a quantidade; segunda busca o mostra como alimento do cadastro, sem duplicar |
 | `recorte3` | Importação seletiva, cadastro por porção do rótulo, sugestões por refeição |
 
 `testes/_comum.js` reúne o endereço do servidor, a pasta de resultados e o encerramento dos navegadores.

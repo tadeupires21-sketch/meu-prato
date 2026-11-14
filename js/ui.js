@@ -280,16 +280,24 @@ export function folhaEscolher(idxRefeicao, aoEscolher, resumo = '') {
     else if (filtro === 'receitas') lista = D.receitas.map((r) => Object.assign({ _receita: true }, r));
     else if (filtro === 'combinacoes') lista = [];
     else lista = filtrarOrdenar([...D.alimentos, ...D.receitas.map((r) => Object.assign({ _receita: true }, r))], q, (x) => x.nome, (x) => x.marca || '');
+    // Itens da lista embutida ainda não importados: aparecem só na busca e entram no cadastro ao toque.
+    const sugestoes = q ? estadoBase().filter((e) => e.novo).map((e) => ({ b: e.b, p: pontuarBusca(q, e.b.nome) })).filter((o) => o.p > 0).sort((x, y) => y.p - x.p || x.b.nome.localeCompare(y.b.nome, 'pt-BR')).slice(0, 8).map((o) => o.b) : [];
+    const htmlSugestoes = sugestoes.length ? `<div class="help secao-base" style="margin:12px 0 4px">Da lista de alimentos comuns — tocar adiciona ao seu cadastro</div>` + sugestoes.map((b) => `<button class="list-item" data-act="pick-sugestao" data-nome="${esc(b.nome)}"><div class="grow"><div class="name">${esc(b.nome)}${b.estado !== 'na' ? ` <span class="badge neutral">${b.estado}</span>` : ''} <span class="badge neutral">${esc(b.fonte || FONTE_TACO)}</span></div><div class="meta">${fmt(b.kcal)} kcal · ${fmt(b.prot, 1)} g prot por 100 ${b.refUnidade || 'g'}</div></div></button>`).join('') : '';
     const marca = (t, id) => selecionando ? `<span class="marca ${noRascunho(t, id) ? 'on' : ''}" aria-hidden="true">${noRascunho(t, id) ? '✓' : ''}</span>` : '';
     const combos = filtro === 'combinacoes' ? (D.combinacoes.length ? D.combinacoes.map((c) => itemListaCombinacao(c, 'pick-combo')).join('') : '<div class="empty">Nenhuma combinação salva. No menu ⋯ de uma refeição com itens, use “Salvar como combinação”.</div>') : '';
     const comBadge = (html, t, id) => usado(t, id) ? html.replace('<div class="meta">', `<div class="meta">${usado(t, id)} · `) : html;
     $('.lista', s).innerHTML = combos + (filtro === 'combinacoes' ? '' : (lista.length ? lista.map((x) => x._receita ? comBadge(itemListaReceita(x, 'pick-receita', ''), 'receita', x.id).replace('<div class="grow">', marca('receita', x.id) + '<div class="grow">') : comBadge(itemListaAlimento(x, 'pick-alimento', ''), 'alimento', x.id).replace('<div class="grow">', marca('alimento', x.id) + '<div class="grow">')).join('')
-      : `<div class="empty">${filtro === 'recentes' ? 'Nada usado recentemente.' : filtro === 'favoritos' ? 'Nenhum favorito ainda.' : 'Nada encontrado.'}</div>`)
+      : `<div class="empty">${filtro === 'recentes' ? 'Nada usado recentemente.' : filtro === 'favoritos' ? 'Nenhum favorito ainda.' : sugestoes.length ? 'Nada no seu cadastro.' : 'Nada encontrado.'}</div>`)
+      + htmlSugestoes
       + `<button class="list-item" data-act="pick-novo"><div class="grow"><div class="name" style="color:var(--brand)">+ Cadastrar novo alimento${q ? ` “${esc(busca.trim())}”` : ''}</div></div></button>`
       + (D.alimentos.length ? '' : `<button class="list-item" data-act="pick-base"><div class="grow"><div class="name" style="color:var(--brand)">+ Adicionar alimentos comuns (TACO)</div><div class="meta">Arroz, feijão, ovo, frango, frutas… com valores da tabela oficial.</div></div></button>`));
     $$('.chip', s).forEach((c) => c.classList.toggle('active', c.dataset.f === filtro));
     const escolher = (t, id) => { if (selecionando) { alternar(t, id); desenhar(s); } else aoEscolher(t, id); };
     $$('[data-act="pick-alimento"]', s).forEach((b) => b.addEventListener('click', () => escolher('alimento', b.dataset.id)));
+    $$('[data-act="pick-sugestao"]', s).forEach((b) => b.addEventListener('click', () => {
+      if (!aplicarBase(new Set([b.dataset.nome]), false)) return;
+      const novo = D.alimentos.find((a) => a.nome === b.dataset.nome); if (novo) escolher('alimento', novo.id);
+    }));
     $$('[data-act="pick-receita"]', s).forEach((b) => b.addEventListener('click', () => escolher('receita', b.dataset.id)));
     $$('[data-act="pick-combo"]', s).forEach((b) => b.addEventListener('click', () => { if (lote) menuCombinacao(b.dataset.id, idxRefeicao); else menuCombinacao(b.dataset.id); }));
     const barra = $('.barra-lote', s);
@@ -299,7 +307,7 @@ export function folhaEscolher(idxRefeicao, aoEscolher, resumo = '') {
   };
   abrirFolha(`${cab('Adicionar alimento')}
     ${resumo ? `<p class="help resumo-refeicao" style="margin-top:-6px">${esc(resumo)}</p>` : ''}
-    <div class="row" style="margin-bottom:10px"><input class="search" type="search" placeholder="Buscar nos meus alimentos" aria-label="Buscar" autofocus style="margin:0"><button class="btn" data-act="pick-codigo" aria-label="Ler código de barras" title="Código de barras">▥</button></div>
+    <div class="row" style="margin-bottom:10px"><input class="search" type="search" placeholder="Buscar alimento" aria-label="Buscar" autofocus style="margin:0"><button class="btn" data-act="pick-codigo" aria-label="Ler código de barras" title="Código de barras">▥</button></div>
     <div class="chips">${[['recentes', 'Recentes'], ['favoritos', 'Favoritos'], ['todos', 'Todos'], ['receitas', 'Receitas'], ['combinacoes', 'Combinações']].map(([k, n]) => `<button class="chip" data-f="${k}">${n}</button>`).join('')}${lote ? '<button class="chip" data-lote title="Selecionar vários">☑ Vários</button>' : ''}</div>
     <div class="lista"></div>
     ${lote ? `<div class="barra-lote row" hidden style="position:sticky;bottom:-16px;background:var(--card);padding:10px 0 4px;margin-top:8px;border-top:1px solid var(--line)"><button class="btn sm ghost" data-cancelar-lote>Cancelar</button><button class="btn primary grow" data-revisar>Revisar</button></div>` : ''}`, (s) => {
