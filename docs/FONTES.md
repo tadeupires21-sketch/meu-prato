@@ -24,6 +24,8 @@
   da TBCA BRC0701B como aproximação, com sódio não informado (a salmoura varia por marca).
 - **Twix**: tabela do rótulo do Twix Caramelo 40 g (Mars), publicada pelo varejista; conferida com outra base (40 g ≈ 196 kcal).
 - **Kebab de carne**: aproximação pela TBCA BRC0844A (pão sírio com carne grelhada e molho de iogurte), unidade de 170 g.
+- **Fettuccine pomodoro com calabresa (Spoleto)**: o Spoleto não publica tabela; aproximação pela TBCA BRC0853A (macarrão com linguiça calabresa e molho de tomate). Prato de 365 g estimado pelas porções de bases de terceiros (FatSecret: massa 200 g, molho 2 conchas 150 g, calabresa 15 g).
+- **Bacon (toucinho defumado), frito**: TBCA BRC0941F, pedaço médio de 15 g.
 - **Leite de vaca integral**: a TACO não traz leite líquido (linhas com asterisco). Valores médios de outras
   tabelas, por 100 ml, marcados como tal. Prefira o rótulo.
 - **Azeite de oliva extra virgem**: TACO linha 260 (884 kcal, 100 g lipídeos; fibra e sódio “NA”).
