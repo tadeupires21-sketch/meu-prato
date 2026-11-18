@@ -25,7 +25,7 @@ let b;
   // 1. Cadastrar alimento: 200 kcal, 10 g prot por 100 g, com medida "unidade" = 50 g
   await p.click('.tab[data-tab=alimentos]');
   await p.click('[data-act=novo-alimento]');
-  await p.fill('[name=nome]', 'Alimento Teste'); await p.click('.sheet summary'); await p.fill('[name=marca]', 'Marca T');
+  await p.fill('[name=nome]', 'Alimento Teste'); await p.click('.sheet summary'); await p.fill('[name=marca]', 'Marca S.A.; "Sul"');
   await p.fill('[name=kcal]', '200'); await p.fill('[name=prot]', '10'); await p.fill('[name=carb]', '20'); await p.fill('[name=gord]', '5');
   await p.fill('[name=mNome]', 'unidade'); await p.fill('[name=mEq]', '50'); await p.click('[data-add-medida]');
   await p.screenshot({ path: SHOT + '/02-form-alimento.png' });
@@ -129,7 +129,7 @@ let b;
   const backup = JSON.parse(fs.readFileSync(jsonPath, 'utf8')); assert.equal(backup.alimentos.length, 1); assert.equal(backup.receitas.length, 1);
   const [dl2] = await Promise.all([p.waitForEvent('download'), p.click('[data-act=exportar-csv]')]);
   const csv = fs.readFileSync(await dl2.path(), 'utf8'); console.log('csv linhas:', csv.split('\r\n').length - 1, '|', csv.split('\r\n')[1]);
-  assert(csv.includes('Alimento Teste (Marca T)'));
+  assert(csv.includes(';"Alimento Teste (Marca S.A.; ""Sul"")";alimento;1,5;unidade;150,0;7,50;'));
   // apagar tudo, depois importar backup inválido e válido
   await p.click('[data-act=apagar-tudo]'); await p.click('.tab[data-tab=hoje]'); assert.equal(await p.locator('.entry').count(), 0);
   await p.click('.tab[data-tab=config]');
