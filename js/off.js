@@ -31,7 +31,8 @@ export function mapearOFF(p, codigo) {
   if (kcal === '' && num100('energy_100g') !== '') kcal = Math.round(num100('energy_100g') / 4.184);
   // A base (100 g ou 100 ml) vem inferida do texto da embalagem; é só um palpite que o usuário confere.
   const qtdTxt = p.quantity || '';
-  const liquido = /\b(ml|l|litros?)\b/i.test(qtdTxt) && !/\b(g|kg|gramas?)\b/i.test(qtdTxt);
+  const embalagem = String(qtdTxt).replace(/(\d)(?=[a-z])/gi, '$1 ');
+  const liquido = /\b(ml|l|litros?)\b/i.test(embalagem) && !/\b(g|kg|gramas?)\b/i.test(embalagem);
   const refUnidade = liquido ? 'ml' : 'g';
   const avisoBase = qtdTxt ? ` Base assumida: 100 ${refUnidade} (embalagem "${qtdTxt}"); se o rótulo informar por 100 ${refUnidade === 'g' ? 'ml' : 'g'}, troque a unidade.` : ' Base assumida: 100 g; confira se o rótulo não é por 100 ml.';
   const medidas = [];

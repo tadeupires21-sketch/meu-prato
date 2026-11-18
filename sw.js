@@ -1,6 +1,6 @@
 // Service worker: guarda a "casca" do app para abrir offline.
 // Ao mudar qualquer arquivo, suba a versão para que o cache antigo seja descartado.
-const VERSAO = 'meu-prato-v36';
+const VERSAO = 'meu-prato-v37';
 const ARQUIVOS = [
   './', './index.html', './styles.css', './manifest.webmanifest',
   './js/alimentos-base.js', './js/backup.js', './js/calculos.js', './js/demo.js', './js/dom.js', './js/dominio.js', './js/estado.js', './js/main.js', './js/nutrientes.js', './js/leitor.js', './js/off.js', './js/ui.js', './js/util.js',
@@ -10,13 +10,13 @@ self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(VERSAO).then((c) => c.addAll(ARQUIVOS)).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', (e) => {
-  e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== VERSAO).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
+  e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => /^meu-prato-v\d+$/.test(k) && k !== VERSAO).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
 });
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   if (new URL(e.request.url).origin !== location.origin) return; // Open Food Facts etc.: direto à rede, sem cache
   e.respondWith(
-    caches.match(e.request, { ignoreSearch: true }).then((hit) => {
+    caches.match(e.request, { cacheName: VERSAO, ignoreSearch: true }).then((hit) => {
       const rede = fetch(e.request).then((resp) => {
         if (resp && resp.ok && new URL(e.request.url).origin === location.origin) {
           const copia = resp.clone();

@@ -44,7 +44,7 @@ export function exportarCSV() {
       linhas.push([data, r.nome, it.rotulo, it.tipo, it.qtd, it.unidade, it.kcal.toFixed(1), it.prot.toFixed(2), it.carb.toFixed(2), it.gord.toFixed(2), opc(it.fibra, 2), opc(it.sodio, 0), D.dias[data].concluido ? 'sim' : 'nao']);
     const ml = aguaDia(D.dias[data]); if (ml) linhas.push([data, 'Água', 'Água', 'agua', ml, 'ml', '0.0', '0.00', '0.00', '0.00', '', '', D.dias[data].concluido ? 'sim' : 'nao']);
   }
-  const cel = (v) => { const s = String(v).replace(/\./g, ',' ); return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const cel = (v) => { const s = String(v); return /[;"\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
   // Números com vírgula decimal e separador ";" para abrir direto no Excel/LibreOffice em pt-BR.
   const csv = '﻿' + linhas.map((l) => l.map((v, i) => (typeof v === 'number' || (i >= 6 && i <= 11)) ? String(v).replace('.', ',') : cel(v)).join(';')).join('\r\n');
   baixar(`meu-prato-historico-${hojeISO()}.csv`, csv, 'text/csv;charset=utf-8'); toast(linhas.length - 1 ? 'CSV gerado.' : 'CSV gerado (sem registros).');
