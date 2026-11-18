@@ -1,7 +1,7 @@
 import { METAS_VAZIAS } from './nutrientes.js';
 import { hojeISO, somarDias, uid } from './util.js';
 import { toast } from './dom.js';
-import { escalar } from './calculos.js';
+import { nutrientesAlimento } from './calculos.js';
 import { carregar, selecionarModo, definirD, modoDemo, REFEICOES_PADRAO, salvar, UI } from './estado.js';
 import { render } from './ui.js';
 
@@ -18,20 +18,19 @@ export function semearDemo(d) {
   d.config.metas = { ...METAS_VAZIAS(), kcal: 2000, prot: 120 }; d.config.historicoMetas = [{ desde: '1970-01-01', metas: { ...d.config.metas }, origem: 'demonstração' }];
   d.alimentos.push(ovo, pao, arroz, feijao, frango, whey, iog);
   d.alimentos.sort((x, y) => x.nome.localeCompare(y.nome, 'pt-BR'));
-  const ing = (a, qtd, unidade) => ({ alimentoId: a.id, rotulo: a.nome, qtd, unidade, ...nutrientesAlimentoDe(a, qtd, unidade) });
+  const ing = (a, qtd, unidade) => ({ alimentoId: a.id, rotulo: a.nome, qtd, unidade, ...nutrientesAlimento(a, qtd, unidade) });
   d.receitas.push({ id: uid(), nome: 'Pão com ovo (exemplo)', porcoes: 1, pesoFinal: null, favorito: true, ingredientes: [ing(pao, 1, 'unidade'), ing(ovo, 1, 'unidade')], criadoEm: new Date().toISOString() },
     { id: uid(), nome: 'Iogurte com whey (exemplo)', porcoes: 1, pesoFinal: 230, favorito: false, ingredientes: [ing(iog, 200, 'g'), ing(whey, 1, 'scoop')], criadoEm: new Date().toISOString() });
   const hoje = hojeISO();
   for (let i = 1; i <= 5; i++) {
     const iso = somarDias(hoje, -i);
     const dia = { refeicoes: REFEICOES_PADRAO.map((n) => ({ id: uid(), nome: n, itens: [] })), concluido: i !== 2, agua: [] };
-    const add = (ref, a, qtd, unidade) => dia.refeicoes[ref].itens.push({ id: uid(), tipo: 'alimento', refId: a.id, rotulo: a.nome, qtd, unidade, criadoEm: new Date().toISOString(), ...nutrientesAlimentoDe(a, qtd, unidade) });
+    const add = (ref, a, qtd, unidade) => dia.refeicoes[ref].itens.push({ id: uid(), tipo: 'alimento', refId: a.id, rotulo: a.nome, qtd, unidade, criadoEm: new Date().toISOString(), ...nutrientesAlimento(a, qtd, unidade) });
     dia.agua = [250, 500, 250, 350].slice(0, 2 + (i % 3)).map((ml) => ({ id: uid(), ml, em: new Date().toISOString() }));
     add(0, pao, 2, 'unidade'); add(0, ovo, 2, 'unidade'); add(1, arroz, 150 + i * 10, 'g'); add(1, feijao, 1, 'concha'); add(1, frango, 150, 'g'); add(2, whey, 1, 'scoop'); add(3, frango, 120, 'g'); add(3, arroz, 100, 'g');
     d.dias[iso] = dia;
   }
 }
-export function nutrientesAlimentoDe(a, qtd, unidade) { const u = [{ nome: a.refUnidade, fator: 1 }, ...a.medidas.map((m) => ({ nome: m.nome, fator: m.equivale }))].find((x) => x.nome === unidade); return escalar(a, (qtd * u.fator) / a.refQtd); }
 export async function alternarDemo() {
   const entrando = !modoDemo();
   try { selecionarModo(entrando); } catch { toast('Sem acesso ao armazenamento.'); return; }
