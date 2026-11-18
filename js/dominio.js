@@ -78,12 +78,13 @@ export function estadoBase() {
   const mesmaFonte = (a, b) => (a.fonte || '') === (b.fonte || FONTE_TACO);
   return ALIMENTOS_BASE.map((b) => {
     const a = porNome.get(b.nome.toLowerCase());
-    const completarMed = !!(a && b.medidas && !a.medidas.length);
-    const completarOpc = !!(a && mesmaFonte(a, b) && NUTR_OPC.some((k) => a[k] == null && b[k] != null));
+    const compativel = a && mesmaFonte(a, b) && a.refUnidade === (b.refUnidade || 'g');
+    const completarMed = !!(compativel && b.medidas?.length && !a.medidas.length);
+    const completarOpc = !!(compativel && a.refQtd === 100 && NUTR_OPC.some((k) => a[k] == null && b[k] != null));
     return { b, a, novo: !a, completar: completarMed || completarOpc, completarMed, completarOpc };
   });
 }
-export function aplicarBase(escolhidos, completarTambem) {
+export async function aplicarBase(escolhidos, completarTambem) {
   const est = estadoBase(); let n = 0, c = 0;
   for (const e of est) {
     if (e.novo && escolhidos.has(e.b.nome)) {
@@ -95,6 +96,7 @@ export function aplicarBase(escolhidos, completarTambem) {
     }
   }
   D.alimentos.sort((x, y) => x.nome.localeCompare(y.nome, 'pt-BR'));
-  if (salvar()) toast(`${n} adicionado(s)${c ? `, ${c} completado(s)` : ''}.`);
+  if (!await salvar()) return 0;
+  toast(`${n} adicionado(s)${c ? `, ${c} completado(s)` : ''}.`);
   return n + c;
 }

@@ -9,7 +9,7 @@
    alimentos-base (dados), util, dom, calculos (puro, sem estado), estado (persistência e validação),
    dominio (dias, metas, histórico), off (Open Food Facts), backup, demo, ui (telas e folhas). */
 import { METAS_VAZIAS, NUTR } from './nutrientes.js';
-import { baixar, fmt, hojeISO, normTexto, num, pontuarBusca, somarDias, uid } from './util.js';
+import { baixar, fmt, hojeISO, mililitros, normTexto, num, pontuarBusca, somarDias, uid } from './util.js';
 import { $, confirmar, mostrarBannerErro, toast } from './dom.js';
 import { nutrientesAlimento, nutrientesReceita, totaisReceita } from './calculos.js';
 import { brutoCorrompido, carregar, chaveAtual, D, dadosVazios, definirD, salvar, UI, validarDados } from './estado.js';
@@ -28,16 +28,16 @@ document.addEventListener('click', (e) => {
     'dia-prox': () => { UI.data = somarDias(UI.data, 1); render(); },
     'ir-hoje': () => { UI.data = hojeISO(); render(); },
     'ir-config': () => { UI.aba = 'config'; render(); },
-    'agua-mais': () => { const ml = num(el.dataset.ml); const dia = obterDia(UI.data); dia.agua.push({ id: uid(), ml, em: new Date().toISOString() }); salvar(); render(); },
+    'agua-mais': async () => { const ml = num(el.dataset.ml); const dia = obterDia(UI.data); dia.agua.push({ id: uid(), ml, em: new Date().toISOString() }); await salvar(); render(); },
     'agua-outro': () => folhaAgua(),
-    'agua-desfazer': () => { const dia = obterDia(UI.data); const u = dia.agua.pop(); if (u) { salvar(); render(); toast(`Removidos ${fmt(u.ml)} ml.`); } },
+    'agua-desfazer': async () => { const dia = obterDia(UI.data); const u = dia.agua.pop(); if (u) { await salvar(); render(); toast(`Removidos ${fmt(u.ml)} ml.`); } },
     'adicionar': () => { obterDia(UI.data); abrirSeletor(Number(el.dataset.idx)); },
     'editar-item': () => folhaItem(Number(el.dataset.idx), el.dataset.item),
     'detalhe': () => folhaDetalheDia(el.dataset.n),
     'menu-refeicao': () => { obterDia(UI.data); menuRefeicao(Number(el.dataset.idx)); },
     'repetir': () => { obterDia(UI.data); repetirUltima(Number(el.dataset.idx)); },
     'abrir-combinacao': () => menuCombinacao(el.dataset.id),
-    'nova-refeicao': () => { const n = prompt('Nome da nova refeição:', 'Ceia'); if (n && n.trim()) { obterDia(UI.data).refeicoes.push({ id: uid(), nome: n.trim(), itens: [] }); salvar(); render(); } },
+    'nova-refeicao': async () => { const n = prompt('Nome da nova refeição:', 'Ceia'); if (n && n.trim()) { obterDia(UI.data).refeicoes.push({ id: uid(), nome: n.trim(), itens: [] }); await salvar(); render(); } },
     'filtro-alimentos': () => { UI.filtroAlimentos = el.dataset.f; render(); },
     'novo-alimento': () => folhaAlimento(null),
     'ler-codigo': () => folhaCodigo((a) => menuAlimento(a.id)),
@@ -55,22 +55,22 @@ document.addEventListener('click', (e) => {
     'alternar-demo': alternarDemo,
     'importar-base': () => folhaImportarBase(),
     'modelo': () => novoDeModelo(Number(el.dataset.i)),
-    'apagar-tudo': () => { if (!confirmar('Apagar TODOS os alimentos, receitas e registros deste modo? Não dá para desfazer. Exporte um backup antes, se quiser.')) return; if (!confirmar('Confirma mesmo? Última chance.')) return; definirD(dadosVazios()); salvar(); render(); toast('Dados apagados.'); },
+    'apagar-tudo': async () => { if (!confirmar('Apagar TODOS os alimentos, receitas e registros deste modo? Não dá para desfazer. Exporte um backup antes, se quiser.')) return; if (!confirmar('Confirma mesmo? Última chance.')) return; definirD(dadosVazios()); await salvar(); render(); toast('Dados apagados.'); },
   };
   if (acoes[act]) acoes[act]();
 });
-document.addEventListener('change', (e) => {
+document.addEventListener('change', async (e) => {
   const el = e.target.closest('[data-act]'); if (!el || el.closest('#sheet-root')) return;
   if (el.dataset.act === 'data' && el.value) { UI.data = el.value; render(); }
-  if (el.dataset.act === 'toggle-off') { D.config.consultarOFF = el.checked; salvar(); toast(el.checked ? 'Consulta ligada.' : 'Consulta desligada.'); }
-  if (el.dataset.act === 'concluir') { const dia = obterDia(UI.data); dia.concluido = el.checked; salvar(); toast(el.checked ? 'Dia marcado como concluído.' : 'Dia reaberto.'); }
+  if (el.dataset.act === 'toggle-off') { D.config.consultarOFF = el.checked; await salvar(); toast(el.checked ? 'Consulta ligada.' : 'Consulta desligada.'); }
+  if (el.dataset.act === 'concluir') { const dia = obterDia(UI.data); dia.concluido = el.checked; await salvar(); toast(el.checked ? 'Dia marcado como concluído.' : 'Dia reaberto.'); }
   if (el.dataset.act === 'arquivo-json' && el.files[0]) { importarJSON(el.files[0]); el.value = ''; }
 });
 document.addEventListener('input', (e) => {
   const el = e.target.closest('[data-act="busca-alimentos"]'); if (!el) return;
   UI.buscaAlimentos = el.value; const pos = el.selectionStart; render(); const novo = $('[data-act="busca-alimentos"]'); novo.focus(); novo.setSelectionRange(pos, pos);
 });
-document.addEventListener('submit', (e) => {
+document.addEventListener('submit', async (e) => {
   const f = e.target.closest('form[data-form]'); if (!f || f.closest('#sheet-root')) return;
   e.preventDefault();
   if (f.dataset.form === 'metas') {
@@ -79,17 +79,17 @@ document.addEventListener('submit', (e) => {
     const hoje = hojeISO(); D.config.metas = novas;
     D.config.historicoMetas = (D.config.historicoMetas || []).filter((h) => h.desde !== hoje);
     D.config.historicoMetas.push({ desde: hoje, metas: { ...novas } }); D.config.historicoMetas.sort((a, b) => a.desde.localeCompare(b.desde));
-    if (salvar()) { toast(temAlgumaMeta(novas) ? 'Metas salvas, valendo a partir de hoje.' : 'Metas removidas a partir de hoje.'); render(); }
+    if (await salvar()) { toast(temAlgumaMeta(novas) ? 'Metas salvas, valendo a partir de hoje.' : 'Metas removidas a partir de hoje.'); render(); }
   }
   if (f.dataset.form === 'agua') {
-    const meta = num(f.meta.value), copo = num(f.copo.value);
-    if (!(meta > 0) || !(copo > 0)) { toast('Meta e copo devem ser números maiores que zero.'); return; }
-    D.config.metaAgua = Math.round(meta); D.config.copoAgua = Math.round(copo); if (salvar()) toast('Água salva.');
+    const meta = mililitros(f.meta.value), copo = mililitros(f.copo.value);
+    if (!meta || !copo) { toast('Meta e copo devem resultar em pelo menos 1 ml.'); return; }
+    D.config.metaAgua = meta; D.config.copoAgua = copo; if (await salvar()) toast('Água salva.');
   }
   if (f.dataset.form === 'refeicoes') {
     const lista = f.lista.value.split('\n').map((s) => s.trim()).filter(Boolean);
     if (!lista.length) { toast('Informe ao menos uma refeição.'); return; }
-    D.config.refeicoesPadrao = lista; salvar(); toast('Refeições padrão salvas.');
+    D.config.refeicoesPadrao = lista; await salvar(); toast('Refeições padrão salvas.');
   }
 });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') fecharFolha(); });

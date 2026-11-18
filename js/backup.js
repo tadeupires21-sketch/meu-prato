@@ -1,6 +1,6 @@
 import { baixar, hojeISO } from './util.js';
 import { confirmar, toast } from './dom.js';
-import { D, definirD, modoDemo, normalizar, salvar, UI, validarDados } from './estado.js';
+import { D, definirD, modoDemo, normalizar, repararAguaLegada, salvar, UI, validarDados } from './estado.js';
 import { aguaDia, diaTemRegistro } from './dominio.js';
 import { render } from './ui.js';
 
@@ -51,14 +51,15 @@ export function exportarCSV() {
 }
 export function importarJSON(arquivo) {
   const leitor = new FileReader();
-  leitor.onload = () => {
+  leitor.onload = async () => {
     let obj; try { obj = JSON.parse(leitor.result); } catch { alert('Arquivo não é um JSON válido.'); return; }
+    repararAguaLegada(obj);
     const v = validarDados(obj); if (!v.ok) { alert('Backup inválido: ' + v.erro); return; }
     const nDias = Object.values(obj.dias).filter(diaTemRegistro).length;
     const atual = `Dados atuais: ${D.alimentos.length} alimentos, ${D.receitas.length} receitas, ${Object.values(D.dias).filter(diaTemRegistro).length} dias com registro.`;
     const novo = `Backup: ${obj.alimentos.length} alimentos, ${obj.receitas.length} receitas, ${nDias} dias com registro${obj.exportadoEm ? ` (exportado em ${new Date(obj.exportadoEm).toLocaleString('pt-BR')})` : ''}.`;
     if (!confirmar(`${novo}\n\n${atual}\n\nSUBSTITUIR os dados atuais pelo backup? Esta ação não pode ser desfeita.`)) return;
-    definirD(normalizar(obj)); salvar(); UI.data = hojeISO(); render(); toast('Backup importado.');
+    definirD(normalizar(obj)); await salvar(); UI.data = hojeISO(); render(); toast('Backup importado.');
   };
   leitor.readAsText(arquivo);
 }
