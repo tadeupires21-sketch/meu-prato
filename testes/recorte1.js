@@ -8,7 +8,22 @@ const RES = pastaResultados('recorte1'); const assert = require('assert');
   const b = registrar(await chromium.launch()); const ctx = await b.newContext({ viewport: { width: 390, height: 844 } }); const p = await ctx.newPage();
   const erros = []; p.on('pageerror', (e) => erros.push(e.message)); p.on('dialog', (d) => d.accept());
   const txt = async (sel) => (await p.locator(sel).first().innerText()).replace(/\s+/g, ' ').trim();
+  await p.goto(new globalThis.URL('manifest.webmanifest', URL).href);
+  await p.evaluate(async () => {
+    await caches.open('meu-prato-v1');
+    const vizinho = await caches.open('outro-app-v1');
+    await vizinho.put('styles.css', new Response('cache de outro aplicativo'));
+  });
   await p.goto(URL);
+  await p.waitForFunction(() => !!navigator.serviceWorker.controller);
+  const isolamento = await p.evaluate(async () => ({
+    antigo: await caches.has('meu-prato-v1'),
+    vizinho: await caches.has('outro-app-v1'),
+    css: await (await fetch('styles.css')).text()
+  }));
+  assert.equal(isolamento.antigo, false);
+  assert.equal(isolamento.vizinho, true);
+  assert.notEqual(isolamento.css, 'cache de outro aplicativo');
   // service worker real: cache com os arquivos
   // Espera real pelo cache do service worker. (waitForFunction com função async não espera: a Promise é "verdadeira".)
   const lerCache = () => p.evaluate(async (v) => { if (!(await caches.keys()).includes(v)) return []; return (await (await caches.open(v)).keys()).map((r) => r.url.split('/').pop()); }, VERSAO_SW);

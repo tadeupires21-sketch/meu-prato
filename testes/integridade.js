@@ -76,10 +76,18 @@ async function testarAgua(browser) {
   await p.waitForSelector('.agua .value:has-text("251 /")');
   assert.equal(await p.evaluate(() => MeuPrato.validar(MeuPrato.dados()).ok), true);
   await p.click('[data-tab=config]');
-  p.once('dialog', dialogo => dialogo.accept());
+  const confirmacao = p.waitForEvent('dialog').then(async (dialogo) => {
+    const mensagem = dialogo.message();
+    await dialogo.accept();
+    return mensagem;
+  });
   await p.locator('[data-act=arquivo-json]').setInputFiles({
     name: 'diario-antigo.json', mimeType: 'application/json', buffer: Buffer.from(backup)
   });
+  const mensagem = await confirmacao;
+  for (const origem of ['Backup', 'Dados atuais']) {
+    assert.ok(mensagem.includes(`${origem}: 0 alimentos, 0 receitas. Dias com refeições: 0. Dias com água: 1.`));
+  }
   await p.waitForSelector('#toast:has-text("Backup importado")');
   await p.reload();
   await p.waitForSelector('.agua .value:has-text("251 /")');

@@ -13,6 +13,12 @@ const RES = pastaResultados('codigo-barras'); const assert = require('assert');
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 1, product: { product_name: 'Iogurte Natural', brands: 'Marca Y, Grupo Z', quantity: '170 g', serving_size: '170 g', nutriments: { 'energy-kcal_100g': 60, proteins_100g: 4.2, carbohydrates_100g: 5.1, fat_100g: 3 } } }) });
   });
   await p.goto(URL);
+  const unidades = await p.evaluate(async () => {
+    const { mapearOFF } = await import('./js/off.js');
+    return ['500 ml', '500ml', '1,5L', '170g', '1kg', '200ml / 170g'].map(
+      quantity => mapearOFF({ quantity }, '').refUnidade);
+  });
+  assert.deepEqual(unidades, ['ml', 'ml', 'ml', 'g', 'g', 'g']);
   console.log('leitor nativo no headless:', await p.evaluate(() => 'BarcodeDetector' in window));
   // 1. fluxo pela refeição: código novo → OFF → formulário → salvar → quantidade → registro
   await p.click('[data-act=adicionar][data-idx="0"]'); await p.click('.sheet [data-act=pick-codigo]');

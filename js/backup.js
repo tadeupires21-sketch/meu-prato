@@ -44,20 +44,26 @@ export function exportarCSV() {
       linhas.push([data, r.nome, it.rotulo, it.tipo, it.qtd, it.unidade, it.kcal.toFixed(1), it.prot.toFixed(2), it.carb.toFixed(2), it.gord.toFixed(2), opc(it.fibra, 2), opc(it.sodio, 0), D.dias[data].concluido ? 'sim' : 'nao']);
     const ml = aguaDia(D.dias[data]); if (ml) linhas.push([data, 'Água', 'Água', 'agua', ml, 'ml', '0.0', '0.00', '0.00', '0.00', '', '', D.dias[data].concluido ? 'sim' : 'nao']);
   }
-  const cel = (v) => { const s = String(v).replace(/\./g, ',' ); return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const cel = (v) => { const s = String(v); return /[;"\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
   // Números com vírgula decimal e separador ";" para abrir direto no Excel/LibreOffice em pt-BR.
   const csv = '﻿' + linhas.map((l) => l.map((v, i) => (typeof v === 'number' || (i >= 6 && i <= 11)) ? String(v).replace('.', ',') : cel(v)).join(';')).join('\r\n');
   baixar(`meu-prato-historico-${hojeISO()}.csv`, csv, 'text/csv;charset=utf-8'); toast(linhas.length - 1 ? 'CSV gerado.' : 'CSV gerado (sem registros).');
 }
+function resumoBackup(dados) {
+  const dias = Object.values(dados.dias);
+  const refeicoes = dias.filter(diaTemRegistro).length;
+  const agua = dias.filter((dia) => aguaDia(dia) > 0).length;
+  return `${dados.alimentos.length} alimentos, ${dados.receitas.length} receitas. Dias com refeições: ${refeicoes}. Dias com água: ${agua}.`;
+}
+
 export function importarJSON(arquivo) {
   const leitor = new FileReader();
   leitor.onload = async () => {
     let obj; try { obj = JSON.parse(leitor.result); } catch { alert('Arquivo não é um JSON válido.'); return; }
     repararAguaLegada(obj);
     const v = validarDados(obj); if (!v.ok) { alert('Backup inválido: ' + v.erro); return; }
-    const nDias = Object.values(obj.dias).filter(diaTemRegistro).length;
-    const atual = `Dados atuais: ${D.alimentos.length} alimentos, ${D.receitas.length} receitas, ${Object.values(D.dias).filter(diaTemRegistro).length} dias com registro.`;
-    const novo = `Backup: ${obj.alimentos.length} alimentos, ${obj.receitas.length} receitas, ${nDias} dias com registro${obj.exportadoEm ? ` (exportado em ${new Date(obj.exportadoEm).toLocaleString('pt-BR')})` : ''}.`;
+    const atual = `Dados atuais: ${resumoBackup(D)}`;
+    const novo = `Backup: ${resumoBackup(obj)}` + (obj.exportadoEm ? ` Exportado em ${new Date(obj.exportadoEm).toLocaleString('pt-BR')}.` : '');
     if (!confirmar(`${novo}\n\n${atual}\n\nSUBSTITUIR os dados atuais pelo backup? Esta ação não pode ser desfeita.`)) return;
     definirD(normalizar(obj)); await salvar(); UI.data = hojeISO(); render(); toast('Backup importado.');
   };
