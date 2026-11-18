@@ -1,7 +1,7 @@
 import { criarConfirmacaoLeitura, codigoValido, detectarEmImagem, prepararQuadro } from './leitor.js';
 import { NUTR, NUTR_OBRIG, NUTR_OPC, NUTRIENTES } from './nutrientes.js';
 import { ALIMENTOS_BASE, FONTE_TACO, MODELOS_BASE } from './alimentos-base.js';
-import { dataCurta, esc, filtrarOrdenar, fmt, fmtIn, hojeISO, num, pontuarBusca, rotuloData, somarDias, uid } from './util.js';
+import { dataCurta, esc, filtrarOrdenar, fmt, fmtIn, hojeISO, mililitros, num, pontuarBusca, rotuloData, somarDias, uid } from './util.js';
 import { $, $$, confirmar, mostrarBannerErro, toast } from './dom.js';
 import { escalar, nutrientesAlimento, nutrientesReceita, rotuloAlimento, somar, totaisReceita, unidadesAlimento, unidadesReceita } from './calculos.js';
 import { brutoCorrompido, chaveAtual, D, modoDemo, salvar, UI, VERSAO_DADOS } from './estado.js';
@@ -294,8 +294,8 @@ export function folhaEscolher(idxRefeicao, aoEscolher, resumo = '') {
     $$('.chip', s).forEach((c) => c.classList.toggle('active', c.dataset.f === filtro));
     const escolher = (t, id) => { if (selecionando) { alternar(t, id); desenhar(s); } else aoEscolher(t, id); };
     $$('[data-act="pick-alimento"]', s).forEach((b) => b.addEventListener('click', () => escolher('alimento', b.dataset.id)));
-    $$('[data-act="pick-sugestao"]', s).forEach((b) => b.addEventListener('click', () => {
-      if (!aplicarBase(new Set([b.dataset.nome]), false)) return;
+    $$('[data-act="pick-sugestao"]', s).forEach((b) => b.addEventListener('click', async () => {
+      if (!await aplicarBase(new Set([b.dataset.nome]), false)) return;
       const novo = D.alimentos.find((a) => a.nome === b.dataset.nome); if (novo) escolher('alimento', novo.id);
     }));
     $$('[data-act="pick-receita"]', s).forEach((b) => b.addEventListener('click', () => escolher('receita', b.dataset.id)));
@@ -395,17 +395,17 @@ export function folhaQuantidade({ tipo, id, item, idxRefeicao, aoConfirmar, aoCo
 }
 
 export function adicionarItem(idxRefeicao, tipo, id) {
-  const inserir = (dados) => {
+  const inserir = async (dados) => {
     const dia = obterDia(UI.data); const ref = dia.refeicoes[idxRefeicao];
     const novo = { id: uid(), tipo, refId: id, criadoEm: new Date().toISOString(), ...dados };
     ref.itens.push(novo); registrarRecente(tipo, id); lembrarPorcao(tipo, id, dados.qtd, dados.unidade);
-    const ok = salvar(); render();
-    if (ok) toast(`${dados.rotulo} em ${ref.nome}: ${fmt(dados.kcal)} kcal.`, { rotulo: 'Desfazer', acao: () => { ref.itens = ref.itens.filter((x) => x.id !== novo.id); salvar(); render(); if ($('.sheet .resumo-refeicao')) abrirSeletor(idxRefeicao); } });
+    const ok = await salvar(); render();
+    if (ok) toast(`${dados.rotulo} em ${ref.nome}: ${fmt(dados.kcal)} kcal.`, { rotulo: 'Desfazer', acao: async () => { ref.itens = ref.itens.filter((x) => x.id !== novo.id); await salvar(); render(); if ($('.sheet .resumo-refeicao')) abrirSeletor(idxRefeicao); } });
     return ref;
   };
   folhaQuantidade({ tipo, id, idxRefeicao,
     aoConfirmar: inserir,
-    aoContinuar: (dados) => { inserir(dados); abrirSeletor(idxRefeicao); } });
+    aoContinuar: async (dados) => { await inserir(dados); abrirSeletor(idxRefeicao); } });
 }
 // Seletor de alimentos para uma refeição, com o parcial da refeição no cabeçalho.
 export function abrirSeletor(idxRefeicao) {
@@ -451,23 +451,23 @@ export function folhaRevisar({ titulo, descricao, linhas, destino, aoConfirmar, 
   });
 }
 // Insere várias linhas numa refeição, com um único "Desfazer" para o lote inteiro.
-export function inserirLote(idxRefeicao, itens, origem) {
+export async function inserirLote(idxRefeicao, itens, origem) {
   const dia = obterDia(UI.data); const ref = dia.refeicoes[idxRefeicao]; if (!ref || !itens.length) return;
   const novos = itens.map((it) => ({ id: uid(), criadoEm: new Date().toISOString(), origem, ...it }));
   ref.itens.push(...novos);
   for (const it of itens) { registrarRecente(it.tipo, it.refId); lembrarPorcao(it.tipo, it.refId, it.qtd, it.unidade); }
-  const ok = salvar(); render();
+  const ok = await salvar(); render();
   const ids = new Set(novos.map((n) => n.id)); const t = somar(novos);
-  if (ok) toast(`${novos.length} ${novos.length === 1 ? 'item' : 'itens'} em ${ref.nome}: ${fmt(t.kcal)} kcal.`, { rotulo: 'Desfazer', acao: () => { ref.itens = ref.itens.filter((x) => !ids.has(x.id)); salvar(); render(); toast('Inclusão desfeita.'); } });
+  if (ok) toast(`${novos.length} ${novos.length === 1 ? 'item' : 'itens'} em ${ref.nome}: ${fmt(t.kcal)} kcal.`, { rotulo: 'Desfazer', acao: async () => { ref.itens = ref.itens.filter((x) => !ids.has(x.id)); await salvar(); render(); toast('Inclusão desfeita.'); } });
 }
 
-export function salvarCombinacao(itens, nomeSugerido) {
+export async function salvarCombinacao(itens, nomeSugerido) {
   if (!itens.length) { toast('A refeição está vazia.'); return; }
   const nome = prompt('Nome da combinação (ex.: Meu café da manhã):', nomeSugerido || ''); if (!nome || !nome.trim()) return;
   if (D.combinacoes.some((c) => c.nome.toLowerCase() === nome.trim().toLowerCase()) && !confirmar(`Já existe “${nome.trim()}”. Salvar outra com o mesmo nome?`)) return;
   D.combinacoes.push({ id: uid(), nome: nome.trim(), itens: linhasDeItens(itens, false).map(({ historico, ...r }) => r), criadoEm: new Date().toISOString() });
   D.combinacoes.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
-  if (salvar()) toast(`Combinação “${nome.trim()}” salva. Ela aparece no seletor, em Combinações.`);
+  if (await salvar()) toast(`Combinação “${nome.trim()}” salva. Ela aparece no seletor, em Combinações.`);
 }
 export function aplicarCombinacao(idxRefeicao, comboId) {
   const c = D.combinacoes.find((x) => x.id === comboId); if (!c) return; const ref = obterDia(UI.data).refeicoes[idxRefeicao];
@@ -479,8 +479,8 @@ export function menuCombinacao(id, idxRefeicao = null) {
   const ops = [];
   if (idxRefeicao !== null) ops.push({ rotulo: 'Usar nesta refeição', acao: () => aplicarCombinacao(idxRefeicao, id) });
   else ops.push({ rotulo: 'Registrar em uma refeição de ' + rotuloData(UI.data).toLowerCase(), acao: () => menu('Em qual refeição?', obterDia(UI.data).refeicoes.map((r, i) => ({ rotulo: r.nome, acao: () => aplicarCombinacao(i, id) }))) });
-  ops.push({ rotulo: 'Renomear', acao: () => { const n = prompt('Novo nome:', c.nome); if (n && n.trim()) { c.nome = n.trim(); salvar(); render(); } } });
-  ops.push({ rotulo: 'Excluir combinação', perigo: true, acao: () => { if (!confirmar(`Excluir “${c.nome}”? Os registros já feitos não mudam.`)) return; D.combinacoes = D.combinacoes.filter((x) => x !== c); salvar(); render(); } });
+  ops.push({ rotulo: 'Renomear', acao: async () => { const n = prompt('Novo nome:', c.nome); if (n && n.trim()) { c.nome = n.trim(); await salvar(); render(); } } });
+  ops.push({ rotulo: 'Excluir combinação', perigo: true, acao: async () => { if (!confirmar(`Excluir “${c.nome}”? Os registros já feitos não mudam.`)) return; D.combinacoes = D.combinacoes.filter((x) => x !== c); await salvar(); render(); } });
   menu(`${c.nome} · ${c.itens.length} itens`, ops);
 }
 export function itemListaCombinacao(c, act) {
@@ -536,24 +536,24 @@ export function folhaItem(idxRefeicao, itemId) {
   const origem = it.tipo === 'alimento' ? D.alimentos.find((a) => a.id === it.refId) : D.receitas.find((r) => r.id === it.refId);
   const ops = [
     { rotulo: 'Alterar quantidade', acao: () => {
-      if (origem) folhaQuantidade({ tipo: it.tipo, id: it.refId, item: it, aoConfirmar: (d) => { Object.assign(it, d); salvar(); render(); } });
+      if (origem) folhaQuantidade({ tipo: it.tipo, id: it.refId, item: it, aoConfirmar: async (d) => { Object.assign(it, d); await salvar(); render(); } });
       else folhaQuantidadeOrfa(it);
     } },
-    { rotulo: 'Duplicar neste dia', acao: () => { ref.itens.push({ ...it, id: uid(), criadoEm: new Date().toISOString() }); salvar(); render(); toast('Item duplicado.'); } },
-    { rotulo: 'Mover para outra refeição', acao: () => menu('Mover para', dia.refeicoes.filter((r) => r !== ref).map((r) => ({ rotulo: r.nome, acao: () => { ref.itens = ref.itens.filter((x) => x !== it); r.itens.push(it); salvar(); render(); } }))) },
+    { rotulo: 'Duplicar neste dia', acao: async () => { ref.itens.push({ ...it, id: uid(), criadoEm: new Date().toISOString() }); await salvar(); render(); toast('Item duplicado.'); } },
+    { rotulo: 'Mover para outra refeição', acao: () => menu('Mover para', dia.refeicoes.filter((r) => r !== ref).map((r) => ({ rotulo: r.nome, acao: async () => { ref.itens = ref.itens.filter((x) => x !== it); r.itens.push(it); await salvar(); render(); } }))) },
   ];
-  if (origem && it.tipo === 'alimento') ops.push({ rotulo: origem.favorito ? 'Remover dos favoritos' : 'Marcar alimento como favorito', acao: () => { origem.favorito = !origem.favorito; salvar(); toast(origem.favorito ? 'Favoritado.' : 'Removido dos favoritos.'); } });
-  if (origem && it.tipo === 'receita') ops.push({ rotulo: origem.favorito ? 'Remover receita dos favoritos' : 'Marcar receita como favorita', acao: () => { origem.favorito = !origem.favorito; salvar(); } });
-  ops.push({ rotulo: 'Excluir registro', perigo: true, acao: () => { ref.itens = ref.itens.filter((x) => x !== it); salvar(); render(); toast('Registro excluído.'); } });
+  if (origem && it.tipo === 'alimento') ops.push({ rotulo: origem.favorito ? 'Remover dos favoritos' : 'Marcar alimento como favorito', acao: async () => { origem.favorito = !origem.favorito; await salvar(); toast(origem.favorito ? 'Favoritado.' : 'Removido dos favoritos.'); } });
+  if (origem && it.tipo === 'receita') ops.push({ rotulo: origem.favorito ? 'Remover receita dos favoritos' : 'Marcar receita como favorita', acao: async () => { origem.favorito = !origem.favorito; await salvar(); } });
+  ops.push({ rotulo: 'Excluir registro', perigo: true, acao: async () => { ref.itens = ref.itens.filter((x) => x !== it); await salvar(); render(); toast('Registro excluído.'); } });
   menu(`${it.rotulo} · ${fmt(it.qtd, 2)} ${it.unidade}`, ops);
 }
 // Item cujo alimento foi apagado: recalcula proporcionalmente a partir do próprio registro.
 export function folhaQuantidadeOrfa(it) {
   abrirFolha(`${cab('Alterar quantidade')}<p class="help">O cadastro original foi excluído. A nova quantidade será calculada proporcionalmente a este registro (${fmt(it.qtd, 2)} ${esc(it.unidade)} = ${fmt(it.kcal)} kcal).</p>
     <div class="field"><label>Quantidade (${esc(it.unidade)})</label><input name="qtd" inputmode="decimal" value="${fmtIn(it.qtd, 3)}"></div><button class="btn primary full" data-ok>Salvar</button>`, (s) => {
-    $('[data-ok]', s).addEventListener('click', () => {
+    $('[data-ok]', s).addEventListener('click', async () => {
       const q = num($('[name=qtd]', s).value); if (!(q > 0)) { toast('Quantidade inválida.'); return; }
-      const f = q / it.qtd; it.kcal *= f; it.prot *= f; it.carb *= f; it.gord *= f; it.qtd = q; salvar(); render(); fecharFolha();
+      const f = q / it.qtd; it.kcal *= f; it.prot *= f; it.carb *= f; it.gord *= f; it.qtd = q; await salvar(); render(); fecharFolha();
     });
   });
 }
@@ -566,9 +566,9 @@ export function menuRefeicao(idx) {
     ...(ant ? [{ rotulo: `Repetir ${ref.nome} de ${rotuloData(ant.data).toLowerCase()} (${ant.refeicao.itens.length} itens)`, acao: () => repetirUltima(idx) }] : []),
     { rotulo: 'Copiar refeição de outro dia', acao: () => folhaCopiar(idx) },
     ...(ref.itens.length ? [{ rotulo: 'Salvar como combinação', acao: () => salvarCombinacao(ref.itens, `Meu ${ref.nome.toLowerCase()}`) }] : []),
-    { rotulo: 'Renomear refeição', acao: () => { const n = prompt('Novo nome da refeição:', ref.nome); if (n && n.trim()) { ref.nome = n.trim(); salvar(); render(); } } },
-    { rotulo: 'Limpar itens desta refeição', perigo: true, acao: () => { if (!ref.itens.length) return; if (confirmar(`Excluir os ${ref.itens.length} itens de ${ref.nome}?`)) { ref.itens = []; salvar(); render(); } } },
-    { rotulo: 'Remover refeição do dia', perigo: true, acao: () => { if (ref.itens.length && !confirmar(`A refeição tem ${ref.itens.length} itens. Remover mesmo assim?`)) return; dia.refeicoes.splice(idx, 1); salvar(); render(); } },
+    { rotulo: 'Renomear refeição', acao: async () => { const n = prompt('Novo nome da refeição:', ref.nome); if (n && n.trim()) { ref.nome = n.trim(); await salvar(); render(); } } },
+    { rotulo: 'Limpar itens desta refeição', perigo: true, acao: async () => { if (!ref.itens.length) return; if (confirmar(`Excluir os ${ref.itens.length} itens de ${ref.nome}?`)) { ref.itens = []; await salvar(); render(); } } },
+    { rotulo: 'Remover refeição do dia', perigo: true, acao: async () => { if (ref.itens.length && !confirmar(`A refeição tem ${ref.itens.length} itens. Remover mesmo assim?`)) return; dia.refeicoes.splice(idx, 1); await salvar(); render(); } },
   ]);
 }
 export function folhaCopiar(idxDestino) {
@@ -665,7 +665,7 @@ export function folhaAlimento(id, inicial = {}, aoSalvar) {
       if (['g', 'ml', 'porção'].includes(nome) || medidas.some((m) => m.nome === nome)) { toast('Já existe uma medida com esse nome.'); return; }
       medidas.push({ nome, equivale: eq }); form.mNome.value = ''; form.mEq.value = ''; redesenharMedidas();
     });
-    form.addEventListener('submit', (e) => {
+    form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const campos = { nome: form.nome.value.trim(), marca: form.marca.value.trim(), estado: form.estado.value, refQtd: num(form.refQtd.value), refUnidade: form.refUnidade.value,
         kcal: num(form.kcal.value), prot: num(form.prot.value), carb: num(form.carb.value), gord: num(form.gord.value),
@@ -687,17 +687,17 @@ export function folhaAlimento(id, inicial = {}, aoSalvar) {
       }
       else { salvo = { id: uid(), ...campos, criadoEm: new Date().toISOString() }; D.alimentos.push(salvo); }
       D.alimentos.sort((x, y) => x.nome.localeCompare(y.nome, 'pt-BR'));
-      const gravou = salvar(); fecharFolha(); render(); if (gravou) toast(a ? 'Alimento atualizado.' : 'Alimento cadastrado.');
+      const gravou = await salvar(); fecharFolha(); render(); if (gravou) toast(a ? 'Alimento atualizado.' : 'Alimento cadastrado.');
       if (aoSalvar) aoSalvar(salvo);
     });
     if (a) {
       $('[data-dup]', s).addEventListener('click', () => folhaAlimento(null, { ...a, id: undefined, nome: a.nome + ' (cópia)' }));
-      $('[data-del]', s).addEventListener('click', () => {
+      $('[data-del]', s).addEventListener('click', async () => {
         const emReceitas = D.receitas.filter((r) => r.ingredientes.some((i) => i.alimentoId === a.id)).map((r) => r.nome);
         const aviso = `Excluir “${a.nome}”? Registros antigos continuam com os valores já calculados.` + (emReceitas.length ? `\n\nUsado nas receitas: ${emReceitas.join(', ')} (elas passam a usar os valores guardados no ingrediente).` : '');
         if (!confirmar(aviso)) return;
         D.alimentos = D.alimentos.filter((x) => x !== a); D.recentes = D.recentes.filter((x) => !(x.tipo === 'alimento' && x.id === a.id));
-        salvar(); fecharFolha(); render(); toast('Alimento excluído.');
+        await salvar(); fecharFolha(); render(); toast('Alimento excluído.');
       });
     }
     form.nome.focus();
@@ -751,7 +751,7 @@ export function folhaReceita(id, rascunho = null, ingsIniciais = null) {
         } });
       }, reabrir);
     });
-    form.addEventListener('submit', (e) => {
+    form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const nome = form.nome.value.trim(); const porcoes = num(form.porcoes.value); const pf = form.pesoFinal.value.trim() === '' ? null : num(form.pesoFinal.value);
       if (!nome) { toast('Informe o nome.'); return; }
@@ -761,9 +761,9 @@ export function folhaReceita(id, rascunho = null, ingsIniciais = null) {
       const campos = { nome, porcoes, pesoFinal: pf, favorito: form.favorito.checked, ingredientes: ings, atualizadoEm: new Date().toISOString() };
       if (r) Object.assign(r, campos); else D.receitas.push({ id: uid(), ...campos, criadoEm: campos.atualizadoEm });
       D.receitas.sort((x, y) => x.nome.localeCompare(y.nome, 'pt-BR'));
-      const gravou = salvar(); fecharFolha(); render(); if (gravou) toast(r ? 'Receita atualizada.' : 'Receita salva.');
+      const gravou = await salvar(); fecharFolha(); render(); if (gravou) toast(r ? 'Receita atualizada.' : 'Receita salva.');
     });
-    if (r) $('[data-del]', s).addEventListener('click', () => { if (!confirmar(`Excluir a receita “${r.nome}”? Registros antigos não mudam.`)) return; D.receitas = D.receitas.filter((x) => x !== r); D.recentes = D.recentes.filter((x) => !(x.tipo === 'receita' && x.id === r.id)); salvar(); fecharFolha(); render(); });
+    if (r) $('[data-del]', s).addEventListener('click', async () => { if (!confirmar(`Excluir a receita “${r.nome}”? Registros antigos não mudam.`)) return; D.receitas = D.receitas.filter((x) => x !== r); D.recentes = D.recentes.filter((x) => !(x.tipo === 'receita' && x.id === r.id)); await salvar(); fecharFolha(); render(); });
   });
 }
 export function folhaEscolherIngrediente(aoEscolher, aoCancelar) {
@@ -789,7 +789,7 @@ export function menuAlimento(id) {
   menu(rotuloAlimento(a), [
     { rotulo: 'Registrar em uma refeição de ' + rotuloData(UI.data).toLowerCase(), acao: () => menu('Em qual refeição?', obterDia(UI.data).refeicoes.map((r, i) => ({ rotulo: r.nome, acao: () => adicionarItem(i, 'alimento', id) }))) },
     { rotulo: 'Editar / excluir', acao: () => folhaAlimento(id) },
-    { rotulo: a.favorito ? 'Remover dos favoritos' : 'Marcar como favorito', acao: () => { a.favorito = !a.favorito; salvar(); render(); } },
+    { rotulo: a.favorito ? 'Remover dos favoritos' : 'Marcar como favorito', acao: async () => { a.favorito = !a.favorito; await salvar(); render(); } },
   ]);
 }
 export function menuReceita(id) {
@@ -797,7 +797,7 @@ export function menuReceita(id) {
   menu(r.nome, [
     { rotulo: 'Registrar em uma refeição de ' + rotuloData(UI.data).toLowerCase(), acao: () => menu('Em qual refeição?', obterDia(UI.data).refeicoes.map((m, i) => ({ rotulo: m.nome, acao: () => adicionarItem(i, 'receita', id) }))) },
     { rotulo: 'Editar / excluir', acao: () => folhaReceita(id) },
-    { rotulo: r.favorito ? 'Remover dos favoritos' : 'Marcar como favorita', acao: () => { r.favorito = !r.favorito; salvar(); render(); } },
+    { rotulo: r.favorito ? 'Remover dos favoritos' : 'Marcar como favorita', acao: async () => { r.favorito = !r.favorito; await salvar(); render(); } },
   ]);
 }
 
@@ -910,10 +910,10 @@ export function folhaAgua() {
     <button class="btn primary full" data-ok>Adicionar</button>
     ${dia.agua.length ? `<hr class="sep"><h3>Registros de ${esc(rotuloData(UI.data).toLowerCase())}</h3><div class="lista">${dia.agua.map((a) => `<div class="ing"><div class="grow">${fmt(a.ml)} ml <span class="muted small">· ${new Date(a.em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span></div><button type="button" class="btn sm ghost danger" data-rm="${a.id}">remover</button></div>`).join('')}</div>` : ''}`, (s) => {
     const inp = $('[name=ml]', s);
-    const add = () => { const ml = num(inp.value); if (!(ml > 0)) { toast('Informe uma quantidade em ml maior que zero.'); return; } dia.agua.push({ id: uid(), ml: Math.round(ml), em: new Date().toISOString() }); salvar(); fecharFolha(); render(); };
+    const add = async () => { const ml = mililitros(inp.value); if (!ml) { toast('Informe uma quantidade que resulte em pelo menos 1 ml.'); return; } dia.agua.push({ id: uid(), ml, em: new Date().toISOString() }); await salvar(); fecharFolha(); render(); };
     $('[data-ok]', s).addEventListener('click', add); inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') add(); });
     $$('.chip', s).forEach((c) => c.addEventListener('click', () => { inp.value = c.dataset.v; add(); }));
-    $$('[data-rm]', s).forEach((b) => b.addEventListener('click', () => { dia.agua = dia.agua.filter((a) => a.id !== b.dataset.rm); salvar(); fecharFolha(); render(); }));
+    $$('[data-rm]', s).forEach((b) => b.addEventListener('click', async () => { dia.agua = dia.agua.filter((a) => a.id !== b.dataset.rm); await salvar(); fecharFolha(); render(); }));
     inp.focus();
   });
 }
@@ -944,7 +944,7 @@ export function folhaImportarBase(aoTerminar) {
     $('[data-todos]', s).addEventListener('click', () => { est.filter((e) => e.novo).forEach((e) => sel.add(e.b.nome)); desenhar(s); });
     $('[data-nenhum]', s).addEventListener('click', () => { sel.clear(); desenhar(s); });
     $('[name=completar]', s)?.addEventListener('change', () => atualizarBotao(s));
-    $('[data-ok]', s).addEventListener('click', () => { const comp = !!$('[name=completar]', s)?.checked; fecharFolha(); aplicarBase(sel, comp); UI.aba = 'alimentos'; UI.filtroAlimentos = 'todos'; render(); if (aoTerminar) aoTerminar(); });
+    $('[data-ok]', s).addEventListener('click', async () => { const comp = !!$('[name=completar]', s)?.checked; fecharFolha(); await aplicarBase(sel, comp); UI.aba = 'alimentos'; UI.filtroAlimentos = 'todos'; render(); if (aoTerminar) aoTerminar(); });
     desenhar(s);
   });
 }

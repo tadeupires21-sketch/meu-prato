@@ -2,7 +2,7 @@ import { METAS_VAZIAS } from './nutrientes.js';
 import { hojeISO, somarDias, uid } from './util.js';
 import { toast } from './dom.js';
 import { escalar } from './calculos.js';
-import { carregar, CHAVE_MODO, definirD, modoDemo, REFEICOES_PADRAO, salvar, UI } from './estado.js';
+import { carregar, selecionarModo, definirD, modoDemo, REFEICOES_PADRAO, salvar, UI } from './estado.js';
 import { render } from './ui.js';
 
 // ---------- Demonstração ----------
@@ -32,9 +32,9 @@ export function semearDemo(d) {
   }
 }
 export function nutrientesAlimentoDe(a, qtd, unidade) { const u = [{ nome: a.refUnidade, fator: 1 }, ...a.medidas.map((m) => ({ nome: m.nome, fator: m.equivale }))].find((x) => x.nome === unidade); return escalar(a, (qtd * u.fator) / a.refQtd); }
-export function alternarDemo() {
+export async function alternarDemo() {
   const entrando = !modoDemo();
-  try { if (entrando) localStorage.setItem(CHAVE_MODO, 'demo'); else localStorage.removeItem(CHAVE_MODO); } catch { toast('Sem acesso ao armazenamento.'); return; }
-  definirD(carregar()); if (entrando) salvar(); UI.data = hojeISO(); UI.aba = 'hoje'; render();
+  try { selecionarModo(entrando); } catch { toast('Sem acesso ao armazenamento.'); return; }
+  definirD(carregar()); if (entrando) await salvar(); UI.data = hojeISO(); UI.aba = 'hoje'; render();
   toast(entrando ? 'Modo demonstração ativado.' : 'De volta aos seus dados reais.');
 }

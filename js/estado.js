@@ -16,16 +16,41 @@ export function dadosVazios() {
     alimentos: [], receitas: [], dias: {}, recentes: [], porcoes: {}, combinacoes: []
   };
 }
-export function modoDemo() { try { return localStorage.getItem(CHAVE_MODO) === 'demo'; } catch { return false; } }
+// Cada aba mantém o modo do documento que abriu. A preferência global só inicializa novas abas.
+function modoInicial() {
+  try { return (sessionStorage.getItem(CHAVE_MODO) ?? localStorage.getItem(CHAVE_MODO)) === 'demo'; }
+  catch { return false; }
+}
+let demo = modoInicial();
+let documento;
+export function modoDemo() { return demo; }
+export function selecionarModo(entrando) {
+  const modo = entrando ? 'demo' : 'real';
+  localStorage.setItem(CHAVE_MODO, modo);
+  sessionStorage.setItem(CHAVE_MODO, modo);
+  demo = entrando;
+}
 export function chaveAtual() { return modoDemo() ? CHAVE_DEMO : CHAVE_REAL; }
 
 export const UI = { aba: 'hoje', data: hojeISO(), filtroAlimentos: 'todos', buscaAlimentos: '', histDias: 7, falhaSalvar: null, dadosCorrompidos: null };
 // Documento de dados do modo atual. Outros módulos leem `D`; trocar o documento inteiro é só via definirD().
 export let D = null;
 export function definirD(novo) { D = novo; return D; }
+export function repararAguaLegada(obj) {
+  // Versões anteriores arredondavam entradas positivas abaixo de 0,5 ml para zero.
+  if (obj?.config?.metaAgua === 0) obj.config.metaAgua = 2000;
+  if (obj?.config?.copoAgua === 0) obj.config.copoAgua = 250;
+  for (const dia of Object.values(obj?.dias || {})) {
+    if (Array.isArray(dia?.agua)) dia.agua = dia.agua.filter((a) => a?.ml !== 0);
+  }
+}
 export function carregar() {
   let bruto = null;
   try { bruto = localStorage.getItem(chaveAtual()); } catch { /* sem acesso */ }
+  documento = { chave: chaveAtual(), bruto };
+  try { sessionStorage.setItem(CHAVE_MODO, demo ? 'demo' : 'real'); } catch { /* sem acesso */ }
+  UI.falhaSalvar = null;
+  UI.dadosCorrompidos = null;
   if (!bruto) {
     const novo = dadosVazios();
     if (modoDemo()) semearDemo(novo);
@@ -34,6 +59,7 @@ export function carregar() {
   let erro = null;
   try {
     const obj = JSON.parse(bruto);
+    repararAguaLegada(obj);
     const v = validarDados(obj);
     if (v.ok) return normalizar(obj);
     erro = v.erro;
@@ -45,18 +71,62 @@ export function carregar() {
   return dadosVazios();
 }
 export function brutoCorrompido() { try { return localStorage.getItem(chaveAtual() + '.corrompido'); } catch { return null; } }
+// Em navegadores sem Web Locks, uma transação de escrita do IndexedDB também
+// serializa a seção crítica entre abas. O diário continua no localStorage.
+function gravarComExclusao(chave, gravar) {
+  if (navigator.locks) return navigator.locks.request(chave, gravar);
+  return new Promise((resolve, reject) => {
+    const abrir = indexedDB.open('meuprato.escrita', 1);
+    abrir.onupgradeneeded = () => abrir.result.createObjectStore('diarios');
+    abrir.onerror = () => reject(abrir.error);
+    abrir.onsuccess = () => {
+      const db = abrir.result;
+      const tx = db.transaction('diarios', 'readwrite');
+      let resultado;
+      tx.objectStore('diarios').get(chave).onsuccess = () => {
+        try { resultado = gravar(); } catch (e) { tx.abort(); reject(e); }
+      };
+      tx.oncomplete = () => { db.close(); resolve(resultado); };
+      tx.onabort = () => { db.close(); reject(tx.error); };
+    };
+  });
+}
 // Retorna true só se gravou. Em falha, mostra banner persistente e bloqueia toasts de sucesso por alguns segundos,
 // para o aviso de erro não ser coberto por "salvo com sucesso" de quem chamou.
-export function salvar() {
+let gravacoesPendentes = 0;
+function avisarGravacaoPendente(evento) {
+  evento.preventDefault();
+  evento.returnValue = '';
+}
+export async function salvar() {
+  const atual = documento;
+  if (++gravacoesPendentes === 1) window.addEventListener('beforeunload', avisarGravacaoPendente);
   try {
-    localStorage.setItem(chaveAtual(), JSON.stringify(D));
+    const novo = JSON.stringify(D);
+    const gravar = () => {
+      if (localStorage.getItem(atual.chave) !== atual.bruto) return false;
+      localStorage.setItem(atual.chave, novo);
+      atual.bruto = novo;
+      return true;
+    };
+    // A comparação e a gravação precisam ocupar a mesma seção exclusiva entre abas.
+    const gravou = await gravarComExclusao(atual.chave, gravar);
+    if (atual !== documento) return gravou;
+    if (!gravou) {
+      UI.falhaSalvar = 'Outra aba alterou este diário. A edição desta aba não foi salva. Recarregue a página e repita a alteração.';
+      mostrarBannerErro(); toast(UI.falhaSalvar, { erro: true });
+      return false;
+    }
     if (UI.falhaSalvar) { UI.falhaSalvar = null; mostrarBannerErro(); }
     return true;
   } catch (e) {
+    if (atual !== documento) return false;
     console.error(e);
     UI.falhaSalvar = 'A última alteração NÃO foi salva (armazenamento cheio ou bloqueado). Exporte um backup em Ajustes antes de continuar.';
     mostrarBannerErro(); toast('Não foi possível salvar.', { erro: true });
     return false;
+  } finally {
+    if (--gravacoesPendentes === 0) window.removeEventListener('beforeunload', avisarGravacaoPendente);
   }
 }
 export function normalizar(obj) {

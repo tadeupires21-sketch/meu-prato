@@ -8,11 +8,12 @@ const RES = pastaResultados('agua'); const assert = require('assert');
   await p.goto(URL); const txt = async (sel) => (await p.locator(sel).first().innerText()).replace(/\s+/g, ' ').trim();
   console.log('inicial:', await txt('.agua .value'));
   await p.click('[data-act=agua-mais][data-ml="250"]'); await p.click('[data-act=agua-mais][data-ml="500"]');
+  await p.waitForSelector('.agua .value:has-text("750")');
   console.log('após 250+500:', await txt('.agua .value'), '|', await txt('.agua .small:not(.label)'));
   assert((await txt('.agua .value')).startsWith('750'));
   await p.click('[data-act=agua-outro]'); await p.fill('.sheet [name=ml]', '350'); await p.click('.sheet [data-ok]'); await p.waitForTimeout(100);
   assert((await txt('.agua .value')).startsWith('1.100'));
-  await p.click('[data-act=agua-desfazer]'); assert((await txt('.agua .value')).startsWith('750'));
+  await p.click('[data-act=agua-desfazer]'); await p.waitForSelector('.agua .value:has-text("750")'); assert((await txt('.agua .value')).startsWith('750'));
   const nivel = await p.evaluate(() => document.querySelector('.copo .onda').style.transform); console.log('nível do copo (750/2000):', nivel);
   // ontem não mistura
   await p.click('[data-act=dia-ant]'); assert((await txt('.agua .value')).startsWith('0')); await p.click('[data-act=ir-hoje]');

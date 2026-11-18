@@ -20,6 +20,11 @@ export function num(str) {
   else if (/^-?\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '');
   return Number(t);
 }
+// Água é armazenada em ml inteiros. O resultado precisa continuar positivo após arredondar.
+export function mililitros(valor) {
+  const ml = Math.round(num(valor));
+  return Number.isSafeInteger(ml) && ml > 0 ? ml : null;
+}
 // Valor para dentro de <input>: sem separador de milhar, para o que se mostra ser o que se lê de volta.
 export function fmtIn(n, dec = 2) { if (n == null || !isFinite(n)) return ''; return Number(n).toLocaleString('pt-BR', { useGrouping: false, minimumFractionDigits: 0, maximumFractionDigits: dec }); }
 // Busca: ignora acentos, caixa e ordem das palavras; nome vale mais que marca.

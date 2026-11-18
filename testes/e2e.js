@@ -110,6 +110,7 @@ let b;
   // nova refeição e concluir dia
   await p.click('[data-act=nova-refeicao]'); await p.waitForSelector('.meal[data-idx="4"]'); assert.equal(await txt('.meal[data-idx="4"] h2'), 'Ceia');
   await p.check('[data-act=concluir]');
+  await p.waitForSelector('#toast:has-text("Dia marcado como concluído")');
 
   // 7. Persistência: recarregar
   await p.reload(); await p.waitForSelector('.entry');
