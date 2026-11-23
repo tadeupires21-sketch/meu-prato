@@ -67,6 +67,8 @@ dependência, sem servidor de dados. Interface em pt-BR, feita para celular (And
   opcionais, marcados com a fonte e editáveis. Medidas por unidade (ovo 50 g, banana 65 g, fatia de pão
   25 g, colher de aveia 15 g) são médias aproximadas de tabelas de medidas caseiras e vêm com aviso para
   pesar e ajustar; maçã e batata-doce não têm unidade sugerida. Whey é só um modelo: valores vêm do rótulo.
+- Busca: além do seu cadastro, sugere os 496 demais alimentos da TACO (planilha completa, não conferida item a
+  item) e, a pedido, procura produtos de marca por nome no Open Food Facts; nesse caso o texto digitado é enviado.
 - Código de barras: leitor pela câmera só no Chrome Android (`BarcodeDetector` nativo); o leitor escolhe uma câmera
   traseira com foco automático, deixa trocar de câmera e, se o vídeo não ler, tira fotos em resolução total sozinho; em outros navegadores,
   digitação do código. A consulta vai ao Open Food Facts (base colaborativa, cobertura parcial no Brasil) e
@@ -90,7 +92,8 @@ servido por HTTP(S); abrir o `index.html` direto do disco (`file://`) não funci
 | `calculos.js` | Cálculos proporcionais, somas com cobertura e receitas. Puro: não lê estado nem tela |
 | `estado.js` | Persistência no `localStorage`, validação de dados e backup, documento atual `D` |
 | `dominio.js` | Dias, metas com vigência, histórico, porções lembradas, combinações e lista embutida |
-| `off.js` | Consulta ao Open Food Facts e conversão para o formato do app |
+| `taco-completa.js` | Restante da TACO, gerado por `docs/taco_completa.mjs` (não editar à mão) |
+| `off.js` | Consulta ao Open Food Facts (código e busca por nome) e conversão para o formato do app |
 | `backup.js`, `demo.js` | Exportação/importação e modo demonstração |
 | `util.js`, `dom.js` | Datas, números, busca; seletores, avisos e confirmações |
 | `ui.js` | Telas e folhas da interface |
@@ -135,6 +138,7 @@ fecha o navegador.
 | `entrega3` | Metas opcionais com vigência, fibras e sódio com “não informado”, receita com dado incompleto, CSV, histórico com denominadores |
 | `compartilhar` | Botão de compartilhar backup: arquivo certo e reimportável, .txt quando o .json é recusado (Android) e reimportado, cancelamento sem download, download quando o navegador não compartilha |
 | `leitor-foto` | Botão “Tirar foto do código”: foto com código vertical lida na tentativa girada, leitura com dígito verificador errado descartada (detector e câmera simulados) |
+| `base-completa` | Restante da TACO (496 itens) sugerido na busca e importado ao toque, lista conferida primeiro; busca de produtos de marca por nome no Open Food Facts simulado: só a pedido, cadastro para conferência, sem duplicar, erro e consulta desligada |
 | `leitor-camera` | Câmera ao vivo: troca sozinha a câmera traseira de foco fixo pela de foco contínuo, botão “Trocar câmera” lembrado no aparelho, foto automática em resolução total lida quando o vídeo não lê (câmeras, foto e detector simulados) |
 | `busca-base` | Busca do registro sugere itens da lista embutida ainda não importados; tocar importa só aquele item (com fonte e observações) e abre a quantidade; segunda busca o mostra como alimento do cadastro, sem duplicar |
 | `recorte3` | Importação seletiva, cadastro por porção do rótulo, sugestões por refeição |

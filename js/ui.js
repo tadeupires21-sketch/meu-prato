@@ -5,8 +5,8 @@ import { dataCurta, esc, filtrarOrdenar, fmt, fmtIn, hojeISO, mililitros, num, p
 import { $, $$, confirmar, mostrarBannerErro, toast } from './dom.js';
 import { escalar, nutrientesAlimento, nutrientesReceita, rotuloAlimento, somar, totaisReceita, unidadesAlimento, unidadesReceita } from './calculos.js';
 import { brutoCorrompido, chaveAtual, D, modoDemo, salvar, UI, VERSAO_DADOS } from './estado.js';
-import { aguaDia, aplicarBase, calcularLinha, diaTemRegistro, estadoBase, frequenciaPorRefeicao, lembrarPorcao, linhasDeItens, metasEm, obterDia, registrarRecente, resumoPeriodo, temAlgumaMeta, totaisDia, ultimaPorcao, ultimaRefeicaoAnterior } from './dominio.js';
-import { consultarOFF, FONTE_OFF, mapearOFF, normalizarCodigo, temLeitor } from './off.js';
+import { aguaDia, aplicarBase, CATALOGO_BASE, calcularLinha, diaTemRegistro, estadoBase, frequenciaPorRefeicao, lembrarPorcao, linhasDeItens, metasEm, obterDia, registrarRecente, resumoPeriodo, temAlgumaMeta, totaisDia, ultimaPorcao, ultimaRefeicaoAnterior } from './dominio.js';
+import { buscarOFF, consultarOFF, FONTE_OFF, mapearOFF, normalizarCodigo, temLeitor } from './off.js';
 
 export function cartaoAgua(dia) {
   const total = aguaDia(dia), meta = D.config.metaAgua, copo = D.config.copoAgua;
@@ -206,7 +206,7 @@ export function telaConfig() {
   <section class="card">
     <h2>Código de barras</h2>
     <p class="help">O leitor usa a câmera pelo próprio navegador (Chrome no Android). Ao ler um código novo, o app consulta o <b>Open Food Facts</b>, base aberta e colaborativa: envia só o código, recebe nome, marca e valores por 100 g, e abre o cadastro para você conferir com o rótulo antes de salvar. Produtos brasileiros nem sempre estão lá ou podem vir incompletos.</p>
-    <label class="check"><input type="checkbox" data-act="toggle-off" ${D.config.consultarOFF ? 'checked' : ''}> <span>Consultar o Open Food Facts ao ler um código</span></label>
+    <label class="check"><input type="checkbox" data-act="toggle-off" ${D.config.consultarOFF ? 'checked' : ''}> <span>Consultar o Open Food Facts (código de barras e busca de produtos por nome)</span></label>
     <p class="small muted">Desligado, o código só fica salvo no alimento e o cadastro é todo manual.</p>
   </section>
   <section class="card">
@@ -262,7 +262,7 @@ export function folhaEscolher(idxRefeicao, aoEscolher, resumo = '') {
   const freq = nomeRef ? frequenciaPorRefeicao(nomeRef) : new Map();
   const usado = (t, id) => { const n = freq.get(`${t}:${id}`); return n ? ` <span class="badge" title="Vezes que entrou em ${esc(nomeRef)} nos últimos 60 dias">${n}× ${n === 1 ? 'no' : 'no'} ${esc(nomeRef.toLowerCase())}</span>` : ''; };
   const rascunho = (lote && UI.rascunhoLote && UI.rascunhoLote.idx === idxRefeicao && UI.rascunhoLote.data === UI.data) ? UI.rascunhoLote.itens : [];
-  let selecionando = rascunho.length > 0;
+  let selecionando = rascunho.length > 0, online = null;
   const chave = (t, id) => `${t}:${id}`;
   const noRascunho = (t, id) => rascunho.some((x) => chave(x.tipo, x.id) === chave(t, id));
   const alternar = (t, id) => { const i = rascunho.findIndex((x) => chave(x.tipo, x.id) === chave(t, id)); if (i >= 0) rascunho.splice(i, 1); else rascunho.push({ tipo: t, id }); UI.rascunhoLote = { idx: idxRefeicao, data: UI.data, itens: rascunho }; };
@@ -281,29 +281,48 @@ export function folhaEscolher(idxRefeicao, aoEscolher, resumo = '') {
     else if (filtro === 'combinacoes') lista = [];
     else lista = filtrarOrdenar([...D.alimentos, ...D.receitas.map((r) => Object.assign({ _receita: true }, r))], q, (x) => x.nome, (x) => x.marca || '');
     // Itens da lista embutida ainda não importados: aparecem só na busca e entram no cadastro ao toque.
-    const sugestoes = q ? estadoBase().filter((e) => e.novo).map((e) => ({ b: e.b, p: pontuarBusca(q, e.b.nome) })).filter((o) => o.p > 0).sort((x, y) => y.p - x.p || x.b.nome.localeCompare(y.b.nome, 'pt-BR')).slice(0, 8).map((o) => o.b) : [];
-    const htmlSugestoes = sugestoes.length ? `<div class="help secao-base" style="margin:12px 0 4px">Da lista de alimentos comuns — tocar adiciona ao seu cadastro</div>` + sugestoes.map((b) => `<button class="list-item" data-act="pick-sugestao" data-nome="${esc(b.nome)}"><div class="grow"><div class="name">${esc(b.nome)}${b.estado !== 'na' ? ` <span class="badge neutral">${b.estado}</span>` : ''} <span class="badge neutral">${esc(b.fonte || FONTE_TACO)}</span></div><div class="meta">${fmt(b.kcal)} kcal · ${fmt(b.prot, 1)} g prot por 100 ${b.refUnidade || 'g'}</div></div></button>`).join('') : '';
+    const sugestoes = q ? estadoBase(CATALOGO_BASE).filter((e) => e.novo).map((e) => ({ b: e.b, p: pontuarBusca(q, e.b.nome) })).filter((o) => o.p > 0).sort((x, y) => y.p - x.p || (ALIMENTOS_BASE.includes(x.b) ? 0 : 1) - (ALIMENTOS_BASE.includes(y.b) ? 0 : 1) || x.b.nome.localeCompare(y.b.nome, 'pt-BR')).slice(0, 8).map((o) => o.b) : [];
+    const htmlSugestoes = sugestoes.length ? `<div class="help secao-base" style="margin:12px 0 4px">Da tabela TACO e da lista de alimentos comuns — tocar adiciona ao seu cadastro</div>` + sugestoes.map((b) => `<button class="list-item" data-act="pick-sugestao" data-nome="${esc(b.nome)}"><div class="grow"><div class="name">${esc(b.nome)}${b.estado !== 'na' ? ` <span class="badge neutral">${b.estado}</span>` : ''} <span class="badge neutral">${esc(b.fonte || FONTE_TACO)}</span></div><div class="meta">${fmt(b.kcal)} kcal · ${fmt(b.prot, 1)} g prot por 100 ${b.refUnidade || 'g'}</div></div></button>`).join('') : '';
+    // Produtos de marca: busca no Open Food Facts só quando o usuário toca (envia o texto da busca).
+    if (online && online.q !== q) online = null;
+    const htmlOnline = !q || q.length < 3 || !D.config.consultarOFF ? '' : !online
+      ? `<button class="list-item" data-act="pick-off"><div class="grow"><div class="name" style="color:var(--brand)">🔎 Buscar “${esc(q)}” em produtos de marca</div><div class="meta">Consulta o ${FONTE_OFF} pela internet; você confere com o rótulo antes de salvar.</div></div></button>`
+      : `<div class="help secao-off" style="margin:12px 0 4px" aria-live="polite">${online.estado === 'carregando' ? `Buscando no ${FONTE_OFF}…` : online.estado === 'erro' ? `O ${FONTE_OFF} não respondeu. Verifique a internet e tente de novo.` : online.itens.length ? `Produtos no ${FONTE_OFF} — tocar abre o cadastro para conferir` : `Nenhum produto com tabela nutricional para “${esc(q)}” no ${FONTE_OFF}.`}</div>`
+        + (online.estado === 'erro' ? `<button class="list-item" data-act="pick-off"><div class="grow"><div class="name" style="color:var(--brand)">Tentar de novo</div></div></button>` : '')
+        + (online.itens || []).map((p, i) => { const m = mapearOFF(p, normalizarCodigo(p.code)); return `<button class="list-item" data-act="pick-off-item" data-i="${i}"><div class="grow"><div class="name">${esc(m.nome)}${m.marca ? ` <span class="badge neutral">${esc(m.marca)}</span>` : ''}</div><div class="meta">${fmt(m.kcal === '' ? null : m.kcal)} kcal · ${fmt(m.prot === '' ? null : m.prot, 1)} g prot por 100 ${m.refUnidade}${p.quantity ? ` · ${esc(p.quantity)}` : ''}</div></div></button>`; }).join('');
     const marca = (t, id) => selecionando ? `<span class="marca ${noRascunho(t, id) ? 'on' : ''}" aria-hidden="true">${noRascunho(t, id) ? '✓' : ''}</span>` : '';
     const combos = filtro === 'combinacoes' ? (D.combinacoes.length ? D.combinacoes.map((c) => itemListaCombinacao(c, 'pick-combo')).join('') : '<div class="empty">Nenhuma combinação salva. No menu ⋯ de uma refeição com itens, use “Salvar como combinação”.</div>') : '';
     const comBadge = (html, t, id) => usado(t, id) ? html.replace('<div class="meta">', `<div class="meta">${usado(t, id)} · `) : html;
     $('.lista', s).innerHTML = combos + (filtro === 'combinacoes' ? '' : (lista.length ? lista.map((x) => x._receita ? comBadge(itemListaReceita(x, 'pick-receita', ''), 'receita', x.id).replace('<div class="grow">', marca('receita', x.id) + '<div class="grow">') : comBadge(itemListaAlimento(x, 'pick-alimento', ''), 'alimento', x.id).replace('<div class="grow">', marca('alimento', x.id) + '<div class="grow">')).join('')
       : `<div class="empty">${filtro === 'recentes' ? 'Nada usado recentemente.' : filtro === 'favoritos' ? 'Nenhum favorito ainda.' : sugestoes.length ? 'Nada no seu cadastro.' : 'Nada encontrado.'}</div>`)
-      + htmlSugestoes
+      + htmlSugestoes + htmlOnline
       + `<button class="list-item" data-act="pick-novo"><div class="grow"><div class="name" style="color:var(--brand)">+ Cadastrar novo alimento${q ? ` “${esc(busca.trim())}”` : ''}</div></div></button>`
       + (D.alimentos.length ? '' : `<button class="list-item" data-act="pick-base"><div class="grow"><div class="name" style="color:var(--brand)">+ Adicionar alimentos comuns (TACO)</div><div class="meta">Arroz, feijão, ovo, frango, frutas… com valores da tabela oficial.</div></div></button>`));
     $$('.chip', s).forEach((c) => c.classList.toggle('active', c.dataset.f === filtro));
     const escolher = (t, id) => { if (selecionando) { alternar(t, id); desenhar(s); } else aoEscolher(t, id); };
     $$('[data-act="pick-alimento"]', s).forEach((b) => b.addEventListener('click', () => escolher('alimento', b.dataset.id)));
     $$('[data-act="pick-sugestao"]', s).forEach((b) => b.addEventListener('click', async () => {
-      if (!await aplicarBase(new Set([b.dataset.nome]), false)) return;
+      if (!await aplicarBase(new Set([b.dataset.nome]), false, CATALOGO_BASE)) return;
       const novo = D.alimentos.find((a) => a.nome === b.dataset.nome); if (novo) escolher('alimento', novo.id);
     }));
     $$('[data-act="pick-receita"]', s).forEach((b) => b.addEventListener('click', () => escolher('receita', b.dataset.id)));
     $$('[data-act="pick-combo"]', s).forEach((b) => b.addEventListener('click', () => { if (lote) menuCombinacao(b.dataset.id, idxRefeicao); else menuCombinacao(b.dataset.id); }));
     const barra = $('.barra-lote', s);
     if (barra) { barra.hidden = !selecionando; if (selecionando) { $('[data-revisar]', barra).textContent = rascunho.length ? `Revisar ${rascunho.length} ${rascunho.length === 1 ? 'item' : 'itens'}` : 'Toque nos itens para marcar'; $('[data-revisar]', barra).disabled = !rascunho.length; } $('[data-lote]', s).classList.toggle('active', selecionando); }
+    const aoCadastrar = (novo) => { if (selecionando) { alternar('alimento', novo.id); abrirSeletor(idxRefeicao); } else aoEscolher('alimento', novo.id); };
+    $('[data-act="pick-off"]', s)?.addEventListener('click', async () => {
+      const pedido = online = { q, estado: 'carregando', itens: [] }; desenhar(s);
+      try { pedido.itens = await buscarOFF(q); pedido.estado = 'ok'; } catch (e) { console.warn(e); pedido.estado = 'erro'; }
+      if (online === pedido && s.isConnected) desenhar(s);
+    });
+    $$('[data-act="pick-off-item"]', s).forEach((b) => b.addEventListener('click', () => {
+      const p = online.itens[Number(b.dataset.i)], codigo = normalizarCodigo(p.code);
+      const existente = D.alimentos.find((a) => a.codigoBarras === codigo);
+      if (existente) { toast(`Já cadastrado: ${rotuloAlimento(existente)}`); escolher('alimento', existente.id); return; }
+      folhaAlimento(null, mapearOFF(p, codigo), aoCadastrar);
+    }));
     $('[data-act="pick-base"]', s)?.addEventListener('click', () => folhaImportarBase(() => { if (lote) abrirSeletor(idxRefeicao); }));
-    $('[data-act="pick-novo"]', s)?.addEventListener('click', () => folhaAlimento(null, { nome: busca.trim() }, (novo) => { if (selecionando) { alternar('alimento', novo.id); abrirSeletor(idxRefeicao); } else aoEscolher('alimento', novo.id); }));
+    $('[data-act="pick-novo"]', s)?.addEventListener('click', () => folhaAlimento(null, { nome: busca.trim() }, aoCadastrar));
   };
   abrirFolha(`${cab('Adicionar alimento')}
     ${resumo ? `<p class="help resumo-refeicao" style="margin-top:-6px">${esc(resumo)}</p>` : ''}

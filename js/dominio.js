@@ -1,5 +1,6 @@
 import { METAS_VAZIAS, NUTR_OBRIG, NUTR_OPC } from './nutrientes.js';
 import { ALIMENTOS_BASE, FONTE_TACO } from './alimentos-base.js';
+import { TACO_COMPLETA } from './taco-completa.js';
 import { hojeISO, somarDias, uid } from './util.js';
 import { toast } from './dom.js';
 import { escalar, nutrientesAlimento, nutrientesReceita, rotuloAlimento, somar } from './calculos.js';
@@ -73,10 +74,12 @@ export function ultimaRefeicaoAnterior(nome, antesDe) {
 }
 // ---------- Alimentos comuns (TACO) ----------
 // Estado de cada item da lista embutida em relação ao cadastro atual.
-export function estadoBase() {
+// Lista conferida primeiro: na busca, em empate, ela vem antes do restante da TACO.
+export const CATALOGO_BASE = [...ALIMENTOS_BASE, ...TACO_COMPLETA];
+export function estadoBase(lista = ALIMENTOS_BASE) {
   const porNome = new Map(D.alimentos.map((a) => [a.nome.toLowerCase(), a]));
   const mesmaFonte = (a, b) => (a.fonte || '') === (b.fonte || FONTE_TACO);
-  return ALIMENTOS_BASE.map((b) => {
+  return lista.map((b) => {
     const a = porNome.get(b.nome.toLowerCase());
     const compativel = a && mesmaFonte(a, b) && a.refUnidade === (b.refUnidade || 'g');
     const completarMed = !!(compativel && b.medidas?.length && !a.medidas.length);
@@ -84,8 +87,9 @@ export function estadoBase() {
     return { b, a, novo: !a, completar: completarMed || completarOpc, completarMed, completarOpc };
   });
 }
-export async function aplicarBase(escolhidos, completarTambem) {
-  const est = estadoBase(); let n = 0, c = 0;
+// `lista`: a conferida (Ajustes, alimentos comuns) ou o catálogo inteiro (sugestões da busca).
+export async function aplicarBase(escolhidos, completarTambem, lista = ALIMENTOS_BASE) {
+  const est = estadoBase(lista); let n = 0, c = 0;
   for (const e of est) {
     if (e.novo && escolhidos.has(e.b.nome)) {
       const b = e.b; D.alimentos.push({ id: uid(), nome: b.nome, marca: '', estado: b.estado, refQtd: 100, refUnidade: b.refUnidade || 'g', kcal: b.kcal, prot: b.prot, carb: b.carb, gord: b.gord, fibra: b.fibra ?? null, sodio: b.sodio ?? null, medidas: (b.medidas || []).map((m) => ({ ...m })), favorito: false, fonte: b.fonte || FONTE_TACO, obs: b.obs || '', criadoEm: new Date().toISOString() }); n++;

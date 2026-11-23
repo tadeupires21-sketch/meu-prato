@@ -32,3 +32,32 @@
 
 Convenções: `null` = não informado; `Tr` (traço) na TACO vira 0; `NA` vira null. Medidas por unidade são
 aproximações de tabelas de medidas caseiras e vêm com aviso no cadastro.
+
+## TACO completa (23/11/2026)
+
+`js/taco-completa.js` traz os 496 alimentos da TACO que não estão na lista conferida à mão. É gerado por
+`node docs/taco_completa.mjs` a partir de `docs/dados/taco_*.csv`, a planilha da TACO 4ª ed. em CSV publicada no
+repositório público `raulfdm/taco-api` (pasta `references/csv`). O site do CFN, de onde veio o PDF, não estava
+acessível no ambiente em que a lista foi gerada.
+
+- **Conferência**: os 99 itens da lista conferida que vêm da TACO têm, todos, uma linha na planilha com energia,
+  proteína, carboidrato e gordura idênticos. Os 496 restantes não foram conferidos item a item com o PDF, e
+  cada um leva essa observação e o número da linha na TACO.
+- **Por que não o `taco_parse.py`**: no PDF, linhas com coluna vazia deslocam os valores (em croquete, quibe e
+  estrogonofe a cinza era lida como fibra; em tremoço e açúcar, o sódio saía de outra coluna) e os óleos caíam
+  na tabela de ácidos graxos. A planilha não tem esse problema.
+- **Fora da lista**: iogurte sabor abacaxi, leite de vaca desnatado UHT, leite de vaca integral e coco verde
+  cru, que a TACO traz com "*" no lugar dos valores.
+- **Convenções**: fibra e sódio vazios viram `null`; "Tr" é 0. Óleos e aguardente têm proteína e carboidrato
+  "NA" (não se aplica) e entram como 0; sais têm energia "NA" e entram como 0 kcal. Bebidas ficam por 100 ml,
+  como já era na lista conferida, embora a TACO informe por 100 g.
+- **Uso no app**: esses itens não entram em "Adicionar alimentos comuns"; aparecem só como sugestão na busca do
+  registro e entram no cadastro ao toque. Em empate, a lista conferida vem antes.
+
+## Busca de produtos por nome (23/11/2026)
+
+Com três letras ou mais, a busca do registro oferece "Buscar … em produtos de marca". Só ao toque o app envia o
+texto digitado ao Open Food Facts (`cgi/search.pl`, filtrado por produtos vendidos no Brasil) e lista os que têm
+nome e energia. Tocar abre o cadastro preenchido para conferência com o rótulo, como no código de barras.
+Desligar a consulta em Ajustes remove a opção. A chamada real ao Open Food Facts não pôde ser exercitada no
+ambiente de desenvolvimento (rede bloqueada): o roteiro `base-completa` usa respostas simuladas.
