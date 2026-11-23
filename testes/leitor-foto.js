@@ -16,6 +16,7 @@ const CERTO = '7896512924124', ERRADO = '7896512924125';
   const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, permissions: ['camera'] });
   await ctx.addInitScript(([certo, errado]) => {
     window.__tentativas = [];
+    delete window.ImageCapture; // foto automática fica fora deste roteiro (ver leitor-camera)
     window.BarcodeDetector = class {
       static async getSupportedFormats() { return ['ean_13', 'ean_8']; }
       async detect(src) {

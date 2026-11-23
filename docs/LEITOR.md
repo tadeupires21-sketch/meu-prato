@@ -28,3 +28,25 @@ leitura com dígito errado nas demais; câmera falsa do Chromium. Não mede o de
 validação de verdade é no celular.
 
 A câmera contínua exige o mesmo código válido em duas detecções consecutivas. Quadros sem código, ambíguos ou com erro reiniciam a sequência. Cada sessão confirma uma única vez; fechar o leitor cancela resultados pendentes. Leitura por foto e entrada manual mantêm seu fluxo. Testes de estado cobrem alternância, repetição, interrupção e cancelamento.
+
+## Câmera certa e foto automática (23/11/2026)
+
+Relato de uso: a câmera ao vivo não lê códigos pequenos porque a imagem não fica nítida. Recorte, contraste,
+zoom, lanterna e foco contínuo já existiam; faltava atacar a origem da imagem.
+
+- **Escolha da câmera**: em celular com várias câmeras traseiras, o navegador pode entregar uma de foco fixo
+  (grande-angular), que nunca fica nítida de perto. Se a câmera aberta declara modos de foco e nenhum é
+  automático, o app testa as outras traseiras e fica na primeira com foco automático; se nenhuma tiver, volta
+  à inicial.
+- **Trocar câmera**: botão no leitor quando há mais de uma traseira. A escolha (automática ou manual) fica em
+  `localStorage`, chave `meuprato.camera`, só neste aparelho e fora do backup.
+- **Foto automática**: depois de 4 s sem leitura, e a cada 3 s, o app tira uma foto em resolução total pela
+  mesma câmera (`ImageCapture.takePhoto`) e a decodifica com as mesmas tentativas da foto manual, sem sair da
+  tela. O vídeo continua sendo lido em paralelo. A folha mostra a resolução da foto.
+
+Limites: nada disso foi medido em câmera real. Não se sabe como cada aparelho declara `focusMode` na câmera de
+foco fixo, nem se `takePhoto` congela a prévia ou mexe no zoom em algum modelo. Validação manual no Android:
+código pequeno com cada câmera do botão, conferir se "Foto automática: L×A" aparece com resolução maior que a
+do vídeo, e se zoom e lanterna continuam valendo depois da primeira foto.
+
+Validação automatizada (`testes/leitor-camera.js`): câmeras, capacidades, foto e detector simulados.

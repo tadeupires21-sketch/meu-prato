@@ -88,3 +88,15 @@ export function criarConfirmacaoLeitura() {
     }
   };
 }
+
+// Câmeras traseiras pelo nome que o navegador dá (Chrome Android: "camera2 0, facing back").
+// Sem nome reconhecível (computador, permissão ainda não dada), devolve todas as câmeras.
+export function camerasTraseiras(dispositivos) {
+  const video = (dispositivos || []).filter((d) => d.kind === 'videoinput' && d.deviceId);
+  const tras = video.filter((d) => /back|rear|tras|environment/i.test(d.label || ''));
+  return tras.length ? tras : video;
+}
+
+// Só afirma "sem foco automático" quando a câmera declara os modos de foco e nenhum é automático.
+// Navegador que não informa (computador) não conta: ali não há outra câmera melhor para procurar.
+export const semFocoAutomatico = (cap) => Array.isArray(cap?.focusMode) && !cap.focusMode.some((m) => m === 'continuous' || m === 'single-shot');

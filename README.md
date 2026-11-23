@@ -67,7 +67,8 @@ dependência, sem servidor de dados. Interface em pt-BR, feita para celular (And
   opcionais, marcados com a fonte e editáveis. Medidas por unidade (ovo 50 g, banana 65 g, fatia de pão
   25 g, colher de aveia 15 g) são médias aproximadas de tabelas de medidas caseiras e vêm com aviso para
   pesar e ajustar; maçã e batata-doce não têm unidade sugerida. Whey é só um modelo: valores vêm do rótulo.
-- Código de barras: leitor pela câmera só no Chrome Android (`BarcodeDetector` nativo); em outros navegadores,
+- Código de barras: leitor pela câmera só no Chrome Android (`BarcodeDetector` nativo); o leitor escolhe uma câmera
+  traseira com foco automático, deixa trocar de câmera e, se o vídeo não ler, tira fotos em resolução total sozinho; em outros navegadores,
   digitação do código. A consulta vai ao Open Food Facts (base colaborativa, cobertura parcial no Brasil) e
   envia apenas o código; o resultado abre no formulário para conferência e pode ser desligada em Ajustes.
 - Sem conta, sincronização, exercícios ou foto.
@@ -134,6 +135,7 @@ fecha o navegador.
 | `entrega3` | Metas opcionais com vigência, fibras e sódio com “não informado”, receita com dado incompleto, CSV, histórico com denominadores |
 | `compartilhar` | Botão de compartilhar backup: arquivo certo e reimportável, .txt quando o .json é recusado (Android) e reimportado, cancelamento sem download, download quando o navegador não compartilha |
 | `leitor-foto` | Botão “Tirar foto do código”: foto com código vertical lida na tentativa girada, leitura com dígito verificador errado descartada (detector e câmera simulados) |
+| `leitor-camera` | Câmera ao vivo: troca sozinha a câmera traseira de foco fixo pela de foco contínuo, botão “Trocar câmera” lembrado no aparelho, foto automática em resolução total lida quando o vídeo não lê (câmeras, foto e detector simulados) |
 | `busca-base` | Busca do registro sugere itens da lista embutida ainda não importados; tocar importa só aquele item (com fonte e observações) e abre a quantidade; segunda busca o mostra como alimento do cadastro, sem duplicar |
 | `recorte3` | Importação seletiva, cadastro por porção do rótulo, sugestões por refeição |
 
