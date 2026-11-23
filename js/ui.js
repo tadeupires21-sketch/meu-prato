@@ -126,7 +126,11 @@ export function telaAlimentos() {
   }
   if (f !== 'receitas') for (const a of filtrarOrdenar(D.alimentos.filter((a) => f !== 'favoritos' || a.favorito), q, (a) => a.nome, (a) => a.marca)) itens.push(itemListaAlimento(a, 'abrir-alimento'));
   for (const r of filtrarOrdenar(D.receitas.filter((r) => f !== 'favoritos' || r.favorito), q, (r) => r.nome)) itens.push(itemListaReceita(r, 'abrir-receita'));
-  html += itens.length ? itens.join('') : `<div class="empty">${D.alimentos.length || D.receitas.length ? 'Nada encontrado com esse filtro.' : 'Nenhum alimento cadastrado ainda. Toque em “+ Alimento” para começar.'}</div>` + (D.alimentos.length ? '' : `<button class="btn full" data-act="importar-base" style="margin-top:8px">Adicionar alimentos comuns (TACO)</button>`);
+  if (!itens.length && f === 'todos' && q) {
+    html += '<div class="empty">Nenhum resultado no seu cadastro.</div><button class="btn full" data-act="buscar-base">Buscar nos alimentos comuns</button>';
+  } else {
+    html += itens.length ? itens.join('') : `<div class="empty">${D.alimentos.length || D.receitas.length ? 'Nada encontrado com esse filtro.' : 'Nenhum alimento cadastrado ainda. Toque em “+ Alimento” para começar.'}</div>` + (D.alimentos.length ? '' : `<button class="btn full" data-act="importar-base" style="margin-top:8px">Adicionar alimentos comuns (TACO)</button>`);
+  }
   html += `</section>`;
   return html;
 }
@@ -919,9 +923,11 @@ export function folhaAgua() {
 }
 
 // Folha de importação: escolher quais itens entram, com estado (cru/cozido) e fonte visíveis.
-export function folhaImportarBase(aoTerminar) {
-  const est = estadoBase(); const sel = new Set(est.filter((e) => e.novo).map((e) => e.b.nome)); let busca = '';
-  const nCompletar = est.filter((e) => e.completar).length;
+export function folhaImportarBase(aoTerminar, buscaInicial = '') {
+  const est = estadoBase();
+  const sel = new Set(buscaInicial ? [] : est.filter((e) => e.novo).map((e) => e.b.nome));
+  let busca = buscaInicial;
+  const nCompletar = buscaInicial ? 0 : est.filter((e) => e.completar).length;
   const desenhar = (s) => {
     const q = busca.trim();
     const vis = est.filter((e) => !q || pontuarBusca(q, e.b.nome) > 0);
@@ -935,8 +941,8 @@ export function folhaImportarBase(aoTerminar) {
   const atualizarBotao = (s) => { const ok = $('[data-ok]', s); const comp = $('[name=completar]', s)?.checked && nCompletar; ok.disabled = !sel.size && !comp; ok.textContent = sel.size ? `Adicionar ${sel.size} ${sel.size === 1 ? 'alimento' : 'alimentos'}` : comp ? `Completar ${nCompletar} já cadastrado(s)` : 'Nada selecionado'; };
   abrirFolha(`${cab('Alimentos comuns')}
     <p class="help" style="margin-top:-6px">Valores por 100 g da ${FONTE_TACO}, lidos do PDF oficial; item de outra fonte está marcado. Entram como cadastro normal, editável. Pesos por unidade são médias: confira pesando.</p>
-    <input class="search" type="search" placeholder="Filtrar a lista" aria-label="Filtrar">
-    <div class="row between small" style="margin-bottom:6px"><button type="button" class="btn sm ghost" data-todos>Marcar todos os novos</button><button type="button" class="btn sm ghost" data-nenhum>Desmarcar</button></div>
+    <input class="search" type="search" placeholder="Filtrar a lista" aria-label="Filtrar" value="${esc(buscaInicial)}">
+    <div class="row between small" style="margin-bottom:6px" ${buscaInicial ? 'hidden' : ''}><button type="button" class="btn sm ghost" data-todos>Marcar todos os novos</button><button type="button" class="btn sm ghost" data-nenhum>Desmarcar</button></div>
     <div class="lista"></div>
     ${nCompletar ? `<label class="check" style="margin-top:8px"><input type="checkbox" name="completar" checked> <span class="small">Também preencher fibras/sódio e medidas vazias em ${nCompletar} item(ns) já cadastrado(s) da mesma fonte, sem sobrescrever valores.</span></label>` : ''}
     <button class="btn primary full" data-ok style="margin-top:10px">Adicionar</button>`, (s) => {

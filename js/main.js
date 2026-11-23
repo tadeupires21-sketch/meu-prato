@@ -53,6 +53,7 @@ document.addEventListener('click', (e) => {
     'exportar-csv': exportarCSV,
     'importar-json': () => $('[data-act="arquivo-json"]').click(),
     'alternar-demo': alternarDemo,
+    'buscar-base': () => folhaImportarBase(null, UI.buscaAlimentos.trim()),
     'importar-base': () => folhaImportarBase(),
     'modelo': () => novoDeModelo(Number(el.dataset.i)),
     'apagar-tudo': async () => { if (!confirmar('Apagar TODOS os alimentos, receitas e registros deste modo? Não dá para desfazer. Exporte um backup antes, se quiser.')) return; if (!confirmar('Confirma mesmo? Última chance.')) return; definirD(dadosVazios()); await salvar(); render(); toast('Dados apagados.'); },
