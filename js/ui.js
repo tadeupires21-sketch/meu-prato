@@ -1,4 +1,4 @@
-import { criarConfirmacaoLeitura, codigoValido, detectarEmImagem, prepararQuadro } from './leitor.js';
+import { camerasTraseiras, criarConfirmacaoLeitura, codigoValido, detectarEmImagem, prepararQuadro, semFocoAutomatico } from './leitor.js';
 import { NUTR, NUTR_OBRIG, NUTR_OPC, NUTRIENTES } from './nutrientes.js';
 import { ALIMENTOS_BASE, FONTE_TACO, MODELOS_BASE } from './alimentos-base.js';
 import { dataCurta, esc, filtrarOrdenar, fmt, fmtIn, hojeISO, mililitros, num, pontuarBusca, rotuloData, somarDias, uid } from './util.js';
@@ -801,6 +801,8 @@ export function menuReceita(id) {
   ]);
 }
 
+// Preferência só deste aparelho (não entra no backup): qual câmera traseira o leitor usa.
+const CHAVE_CAMERA = 'meuprato.camera', ESPERA_FOTO_MS = 4000, INTERVALO_FOTO_MS = 3000;
 // Fluxo: código → alimento já cadastrado (callback direto) → consulta OFF → formulário preenchido → callback ao salvar.
 export function folhaCodigo(aoEscolher) {
   let stream = null, rodando = false, encerrado = false;
@@ -825,7 +827,7 @@ export function folhaCodigo(aoEscolher) {
   abrirFolha(`${cab('Código de barras')}
     ${temLeitor() ? `<div class="camera"><video playsinline muted autoplay style="width:100%;border-radius:12px;background:#000;aspect-ratio:4/3;object-fit:contain"></video><div class="row cam-ctr" style="margin-top:8px;min-height:0"></div><p class="help cam-msg">Abrindo a câmera…</p><p class="small muted cam-res"></p>
       <label class="btn full" style="margin-top:4px">📷 Tirar foto do código<input type="file" accept="image/*" capture="environment" data-foto hidden></label>
-      <p class="small muted" style="margin-top:4px">A foto usa o app de câmera do celular, com foco por toque e resolução total: lê melhor códigos pequenos, curvos ou com reflexo.</p></div>`
+      <p class="small muted" style="margin-top:4px">Se o vídeo não ler em alguns segundos, o app tira fotos em resolução total sozinho. O botão acima abre o app de câmera do celular, com foco por toque: é o melhor caminho para códigos muito pequenos, curvos ou com reflexo.</p></div>`
       : `<p class="help">Este navegador não tem leitor de código embutido (no Android, use o Chrome). Digite o código abaixo.</p>`}
     <form class="row" data-form="codigo"><div class="field grow" style="margin:0"><label>Código (EAN)</label><input name="codigo" inputmode="numeric" pattern="[0-9]*" placeholder="7891234567890" autocomplete="off"></div><button class="btn primary" type="submit" style="align-self:flex-end">Buscar</button></form>
     <p class="help status" aria-live="polite" style="margin-top:10px"></p>
@@ -834,8 +836,17 @@ export function folhaCodigo(aoEscolher) {
     const bd = $('.sheet-backdrop'); const obs = new MutationObserver(() => { if (!document.contains(bd)) { parar(); obs.disconnect(); } }); obs.observe($('#sheet-root'), { childList: true });
     if (!temLeitor()) { $('[name=codigo]', s).focus(); return; }
     const video = $('video', s), msg = $('.cam-msg', s);
+    // A foto externa só pausa a câmera ao vivo: sem leitura (ou foto cancelada), o vídeo volta sozinho.
+    let pausada = false, lendoFoto = false;
+    const pausar = () => { pausada = true; soltar(); video.srcObject = null; };
+    const retomar = (aviso) => {
+      if (!pausada || lendoFoto || encerrado || feito || !det || !s.isConnected) return;
+      pausada = false; msg.textContent = 'Reabrindo a câmera…';
+      abrirCamera(lembrada(), false).then(() => { if (aviso && rodando) msg.textContent = aviso; })
+        .catch((e) => { console.warn(e); msg.textContent = (aviso ? aviso + ' ' : '') + 'A câmera ao vivo não reabriu: feche e abra o leitor, ou digite os números abaixo.'; });
+    };
     const lerFoto = async (arquivo) => {
-      parar(); video.srcObject = null;
+      lendoFoto = true; pausar();
       msg.textContent = 'Lendo a foto…';
       try {
         const formatosF = (await BarcodeDetector.getSupportedFormats()).filter((f) => ['ean_13', 'ean_8', 'upc_a', 'upc_e'].includes(f));
@@ -845,29 +856,55 @@ export function folhaCodigo(aoEscolher) {
         $('.cam-res', s).textContent = `Foto: ${bmp.width}×${bmp.height}`;
         if (bmp.close) bmp.close();
         if (r) { msg.textContent = `Lido na foto: ${r.codigo}`; tratar(s, r.codigo); return; }
-        msg.textContent = 'Não consegui ler o código na foto. Tente de novo mais perto, com o código ocupando boa parte da foto e sem reflexo, ou digite os números abaixo.';
-      } catch (e) { console.warn(e); msg.textContent = 'Não foi possível ler a foto. Digite os números abaixo.'; }
+        lendoFoto = false; retomar('Não consegui ler o código na foto. A câmera voltou: tente de novo mais perto, com o código ocupando boa parte da foto e sem reflexo, ou digite os números abaixo.');
+      } catch (e) { console.warn(e); lendoFoto = false; retomar('Não foi possível ler a foto. A câmera voltou; se preferir, digite os números abaixo.'); }
     };
     $('[data-foto]', s).addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) lerFoto(f); });
     // Abrir o app de câmera com o vídeo ainda ligado pode disputar a câmera: desliga antes.
-    $('[data-foto]', s).closest('label').addEventListener('click', () => { parar(); });
-    try {
-      const formatos = (await BarcodeDetector.getSupportedFormats()).filter((f) => ['ean_13', 'ean_8', 'upc_a', 'upc_e'].includes(f));
-      if (!formatos.length) throw new Error('sem formatos EAN');
-      const det = new BarcodeDetector({ formats: formatos });
-      // Resolução alta + foco contínuo ajudam em código pequeno; zoom e lanterna quando a câmera oferecer.
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
+    $('[data-foto]', s).closest('label').addEventListener('click', () => { pausar(); });
+    // Voltou do app de câmera sem foto: o navegador avisa com "cancel"; onde não avisa, a volta da aba resolve.
+    $('[data-foto]', s).addEventListener('cancel', () => retomar());
+    const aoVoltar = () => { if (!s.isConnected) { document.removeEventListener('visibilitychange', aoVoltar); return; } if (document.visibilityState === 'visible') setTimeout(() => retomar(), 1500); };
+    document.addEventListener('visibilitychange', aoVoltar);
+    // Câmera ao vivo. Três reforços para código pequeno: escolher uma câmera traseira com foco automático
+    // (e deixar trocar), zoom/lanterna, e fotos em resolução total tiradas sozinhas quando o vídeo não lê.
+    const ctr = $('.cam-ctr', s), res = $('.cam-res', s);
+    let det = null, geracao = 0, cameras = [], primeira = null, feito = false;
+    const testadas = new Set();
+    const lembrada = () => { try { return localStorage.getItem(CHAVE_CAMERA) || ''; } catch { return ''; } };
+    const lembrar = (id) => { try { localStorage.setItem(CHAVE_CAMERA, id); } catch { /* preferência opcional */ } };
+    const pedir = (id) => navigator.mediaDevices.getUserMedia({ video: { ...(id ? { deviceId: { exact: id } } : { facingMode: { ideal: 'environment' } }), width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
+    const soltar = () => { rodando = false; geracao++; if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; } };
+    const concluir = (codigo, texto) => { if (feito) return; feito = true; msg.textContent = texto; tratar(s, codigo); };
+    const abrirCamera = async (id, procurar) => {
+      soltar(); const minha = geracao; ctr.innerHTML = '';
+      let nova;
+      try { nova = await pedir(id); } catch (e) { if (!id) throw e; id = ''; procurar = true; nova = await pedir(''); } // câmera lembrada sumiu
+      if (encerrado || !s.isConnected || minha !== geracao) { nova.getTracks().forEach((t) => t.stop()); if (minha === geracao) parar(); return; }
+      stream = nova; video.srcObject = stream; await video.play();
       if (encerrado || !s.isConnected) { parar(); return; }
-      video.srcObject = stream; await video.play();
-      if (encerrado || !s.isConnected) { parar(); return; }
-      rodando = true;
+      if (minha !== geracao) return;
       const trilha = stream.getVideoTracks()[0];
       const st = trilha.getSettings ? trilha.getSettings() : {};
-      if (st.width && st.height) $('.cam-res', s).textContent = `Vídeo da câmera: ${st.width}×${st.height}. Se estiver baixo, use “Tirar foto do código”.`;
       const cap = trilha.getCapabilities ? trilha.getCapabilities() : {};
+      const atual = st.deviceId || id || '';
+      if (primeira === null) primeira = atual;
+      // Os nomes das câmeras só aparecem depois da permissão concedida.
+      if (!cameras.length) cameras = camerasTraseiras(await navigator.mediaDevices.enumerateDevices().catch(() => []));
+      if (encerrado || !s.isConnected) { parar(); return; }
+      if (minha !== geracao) return;
+      // Celular com várias câmeras traseiras: a escolhida pelo navegador pode ser de foco fixo (grande-angular),
+      // que nunca fica nítida de perto. Procura uma com foco automático; se nenhuma tiver, volta à primeira.
+      if (procurar && semFocoAutomatico(cap)) {
+        testadas.add(atual);
+        const proxima = cameras.find((c) => !testadas.has(c.deviceId));
+        if (proxima) return abrirCamera(proxima.deviceId, true);
+        if (primeira && atual !== primeira) return abrirCamera(primeira, false);
+      } else if (procurar && testadas.size && atual) lembrar(atual);
+      rodando = true;
+      if (st.width && st.height) res.textContent = `Vídeo da câmera: ${st.width}×${st.height}.`;
       const aplicar = (c) => trilha.applyConstraints({ advanced: [c] }).catch(() => {});
       if (Array.isArray(cap.focusMode) && cap.focusMode.includes('continuous')) aplicar({ focusMode: 'continuous' });
-      const ctr = $('.cam-ctr', s);
       if (cap.zoom && cap.zoom.max > cap.zoom.min) {
         const z = document.createElement('input'); z.type = 'range'; z.min = cap.zoom.min; z.max = cap.zoom.max; z.step = cap.zoom.step || 0.1;
         z.value = Math.min(cap.zoom.max, Math.max(cap.zoom.min, 2)); z.setAttribute('aria-label', 'Zoom'); z.className = 'grow';
@@ -878,22 +915,57 @@ export function folhaCodigo(aoEscolher) {
         let ligada = false; const bt = document.createElement('button'); bt.type = 'button'; bt.className = 'btn sm'; bt.textContent = '🔦 Lanterna';
         bt.addEventListener('click', () => { ligada = !ligada; aplicar({ torch: ligada }); bt.classList.toggle('primary', ligada); }); ctr.append(bt);
       }
-      msg.textContent = 'Centralize o código inteiro, com margem nas laterais. Afaste um pouco se estiver desfocado; incline a embalagem para evitar reflexos.' + (cap.zoom ? ' Use o zoom para códigos pequenos.' : '');
+      if (cameras.length > 1) {
+        const i = Math.max(0, cameras.findIndex((c) => c.deviceId === atual));
+        const bt = document.createElement('button'); bt.type = 'button'; bt.className = 'btn sm'; bt.dataset.trocarCamera = ''; bt.textContent = `🔄 Trocar câmera (${i + 1}/${cameras.length})`;
+        bt.addEventListener('click', () => {
+          const prox = cameras[(i + 1) % cameras.length].deviceId; lembrar(prox); msg.textContent = 'Trocando de câmera…';
+          abrirCamera(prox, false).catch((e) => { console.warn(e); msg.textContent = 'Não foi possível abrir essa câmera. Tente trocar de novo ou tire uma foto do código.'; });
+        }); ctr.append(bt);
+      }
+      msg.textContent = 'Centralize o código inteiro, com margem nas laterais. Afaste um pouco se estiver desfocado; incline a embalagem para evitar reflexos.' + (cap.zoom ? ' Use o zoom para códigos pequenos.' : '') + (cameras.length > 1 ? ' Se a imagem não ficar nítida, troque de câmera.' : '');
+      // Foto em resolução total, sem sair do app: o vídeo entrega bem menos detalhe do que o sensor captura.
+      const captura = 'ImageCapture' in window ? new ImageCapture(trilha) : null;
+      const inicio = Date.now(); let ultimaFoto = 0, fotografando = false;
+      const fotoAutomatica = async () => {
+        const agora = Date.now();
+        if (!captura || fotografando || agora - inicio < ESPERA_FOTO_MS || agora - ultimaFoto < INTERVALO_FOTO_MS) return;
+        fotografando = true;
+        try {
+          const bmp = await createImageBitmap(await captura.takePhoto());
+          const vale = () => minha === geracao && rodando && s.isConnected;
+          if (vale()) {
+            res.textContent = `Vídeo da câmera: ${st.width}×${st.height}. Foto automática: ${bmp.width}×${bmp.height}.`;
+            const r = await detectarEmImagem(det, bmp, bmp.width, bmp.height);
+            if (r && vale()) concluir(r.codigo, `Lido na foto automática: ${r.codigo}`);
+          }
+          if (bmp.close) bmp.close();
+        } catch (e) { console.warn(e); /* câmera sem foto: o vídeo continua */ } finally { ultimaFoto = Date.now(); fotografando = false; }
+      };
       const canvas = document.createElement('canvas');
       let tentativa = 0;
       const laco = async () => {
-        if (!rodando) return;
+        if (!rodando || minha !== geracao) return;
         try { const modo = tentativa++ % 3;
           const fonte = modo === 0 ? video : prepararQuadro(video, canvas, modo === 2);
           const cods = (await det.detect(fonte)).filter((x) => codigoValido(x.rawValue));
+          if (minha !== geracao) return;
           if (!rodando || !s.isConnected) { parar(); return; }
           const unicos = [...new Set(cods.map((x) => x.rawValue))];
           const codigo = confirmacao.observar(unicos.length === 1 ? unicos[0] : null);
-          if (codigo) { msg.textContent = `Lido: ${codigo}`; tratar(s, codigo); return; }
+          if (codigo) { concluir(codigo, `Lido: ${codigo}`); return; }
         } catch { confirmacao.observar(null); /* quadro inválido quebra a sequência */ }
+        fotoAutomatica();
         setTimeout(laco, 120);
       };
       laco();
+    };
+    try {
+      const formatos = (await BarcodeDetector.getSupportedFormats()).filter((f) => ['ean_13', 'ean_8', 'upc_a', 'upc_e'].includes(f));
+      if (!formatos.length) throw new Error('sem formatos EAN');
+      det = new BarcodeDetector({ formats: formatos });
+      const salva = lembrada();
+      await abrirCamera(salva, !salva);
     } catch (e) {
       console.warn(e); parar(); if (!s.isConnected) return; $('.camera', s).innerHTML = `<p class="help">Não foi possível usar a câmera (${e.name === 'NotAllowedError' ? 'permissão negada' : 'indisponível'}). Digite o código abaixo.</p>`;
       $('[name=codigo]', s).focus();
