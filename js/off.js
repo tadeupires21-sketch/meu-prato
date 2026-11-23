@@ -22,6 +22,22 @@ export async function consultarOFF(codigo) {
   }
   throw ultimoErro || new Error('falha na consulta');
 }
+// Busca por nome, só quando o usuário pede (um toque): envia o texto digitado. Filtra produtos vendidos no
+// Brasil e descarta os que não têm nome ou energia, que não serviriam para o cadastro.
+export async function buscarOFF(termo, limite = 12) {
+  const q = new URLSearchParams({ search_terms: termo, search_simple: '1', action: 'process', json: '1', page_size: String(limite * 2),
+    tagtype_0: 'countries', tag_contains_0: 'contains', tag_0: 'brazil', fields: 'code,product_name,product_name_pt,brands,quantity,serving_size,nutriments' });
+  const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 15000);
+  try {
+    const r = await fetch(`https://world.openfoodfacts.org/cgi/search.pl?${q}`, { signal: ctrl.signal, headers: { 'Accept': 'application/json' } });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const j = await r.json();
+    return (Array.isArray(j.products) ? j.products : []).filter((p) => {
+      const n = p.nutriments || {};
+      return normalizarCodigo(p.code) && (p.product_name_pt || p.product_name || '').trim() && ['energy-kcal_100g', 'energy-kj_100g', 'energy_100g'].some((k) => n[k] !== undefined && n[k] !== '' && isFinite(Number(n[k])));
+    }).slice(0, limite);
+  } finally { clearTimeout(t); }
+}
 // Converte o registro do OFF nos campos do formulário. Só por 100 g/ml; kJ vira kcal (÷4,184) se faltar kcal.
 export function mapearOFF(p, codigo) {
   const n = p.nutriments || {};
