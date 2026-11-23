@@ -836,8 +836,17 @@ export function folhaCodigo(aoEscolher) {
     const bd = $('.sheet-backdrop'); const obs = new MutationObserver(() => { if (!document.contains(bd)) { parar(); obs.disconnect(); } }); obs.observe($('#sheet-root'), { childList: true });
     if (!temLeitor()) { $('[name=codigo]', s).focus(); return; }
     const video = $('video', s), msg = $('.cam-msg', s);
+    // A foto externa só pausa a câmera ao vivo: sem leitura (ou foto cancelada), o vídeo volta sozinho.
+    let pausada = false, lendoFoto = false;
+    const pausar = () => { pausada = true; soltar(); video.srcObject = null; };
+    const retomar = (aviso) => {
+      if (!pausada || lendoFoto || encerrado || feito || !det || !s.isConnected) return;
+      pausada = false; msg.textContent = 'Reabrindo a câmera…';
+      abrirCamera(lembrada(), false).then(() => { if (aviso && rodando) msg.textContent = aviso; })
+        .catch((e) => { console.warn(e); msg.textContent = (aviso ? aviso + ' ' : '') + 'A câmera ao vivo não reabriu: feche e abra o leitor, ou digite os números abaixo.'; });
+    };
     const lerFoto = async (arquivo) => {
-      parar(); video.srcObject = null;
+      lendoFoto = true; pausar();
       msg.textContent = 'Lendo a foto…';
       try {
         const formatosF = (await BarcodeDetector.getSupportedFormats()).filter((f) => ['ean_13', 'ean_8', 'upc_a', 'upc_e'].includes(f));
@@ -847,12 +856,16 @@ export function folhaCodigo(aoEscolher) {
         $('.cam-res', s).textContent = `Foto: ${bmp.width}×${bmp.height}`;
         if (bmp.close) bmp.close();
         if (r) { msg.textContent = `Lido na foto: ${r.codigo}`; tratar(s, r.codigo); return; }
-        msg.textContent = 'Não consegui ler o código na foto. Tente de novo mais perto, com o código ocupando boa parte da foto e sem reflexo, ou digite os números abaixo.';
-      } catch (e) { console.warn(e); msg.textContent = 'Não foi possível ler a foto. Digite os números abaixo.'; }
+        lendoFoto = false; retomar('Não consegui ler o código na foto. A câmera voltou: tente de novo mais perto, com o código ocupando boa parte da foto e sem reflexo, ou digite os números abaixo.');
+      } catch (e) { console.warn(e); lendoFoto = false; retomar('Não foi possível ler a foto. A câmera voltou; se preferir, digite os números abaixo.'); }
     };
     $('[data-foto]', s).addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) lerFoto(f); });
     // Abrir o app de câmera com o vídeo ainda ligado pode disputar a câmera: desliga antes.
-    $('[data-foto]', s).closest('label').addEventListener('click', () => { parar(); });
+    $('[data-foto]', s).closest('label').addEventListener('click', () => { pausar(); });
+    // Voltou do app de câmera sem foto: o navegador avisa com "cancel"; onde não avisa, a volta da aba resolve.
+    $('[data-foto]', s).addEventListener('cancel', () => retomar());
+    const aoVoltar = () => { if (!s.isConnected) { document.removeEventListener('visibilitychange', aoVoltar); return; } if (document.visibilityState === 'visible') setTimeout(() => retomar(), 1500); };
+    document.addEventListener('visibilitychange', aoVoltar);
     // Câmera ao vivo. Três reforços para código pequeno: escolher uma câmera traseira com foco automático
     // (e deixar trocar), zoom/lanterna, e fotos em resolução total tiradas sozinhas quando o vídeo não lê.
     const ctr = $('.cam-ctr', s), res = $('.cam-res', s);

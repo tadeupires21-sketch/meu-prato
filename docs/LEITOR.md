@@ -50,3 +50,7 @@ código pequeno com cada câmera do botão, conferir se "Foto automática: L×A"
 do vídeo, e se zoom e lanterna continuam valendo depois da primeira foto.
 
 Validação automatizada (`testes/leitor-camera.js`): câmeras, capacidades, foto e detector simulados.
+
+Correção (23/11/2026, relato de uso): depois de "Tirar foto do código", a câmera ao vivo não voltava. O toque
+no botão encerrava o leitor de vez. Agora a foto externa só pausa o vídeo: foto sem leitura, foto cancelada
+ou volta ao app sem foto reabrem a câmera lembrada, com o aviso na tela.
