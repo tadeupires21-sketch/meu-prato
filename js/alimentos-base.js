@@ -88,6 +88,7 @@ export const ALIMENTOS_BASE = [
   { nome: 'Cebola, crua', estado: 'cru', kcal: 39, prot: 1.7, carb: 8.9, gord: 0.1, fibra: 2.2, sodio: 1 },
   { nome: 'Milho verde enlatado, drenado', estado: 'na', kcal: 98, prot: 3.2, carb: 17.1, gord: 2.4, fibra: 4.6, sodio: 260 },
   { nome: 'Feijão fradinho, cozido', estado: 'cozido', kcal: 78, prot: 5.1, carb: 13.5, gord: 0.6, fibra: 7.5, sodio: 1 },
+  { nome: 'Salmão sem pele, fresco, cru', estado: 'cru', kcal: 170, prot: 19.3, carb: 0, gord: 9.7, fibra: null, sodio: 64 },
   { nome: 'Salmão sem pele, fresco, grelhado', estado: 'cozido', kcal: 243, prot: 26.1, carb: 0, gord: 14.5, fibra: null, sodio: 96 },
   { nome: 'Carne bovina, maminha, grelhada', estado: 'cozido', kcal: 153, prot: 30.7, carb: 0, gord: 2.4, fibra: null, sodio: 58, obs: 'TACO: mesma energia da crua por 100 g porque a grelhada perde água e gordura. Prefira pesar como vai comer (pronta).' },
   { nome: 'Carne bovina, maminha, crua', estado: 'cru', kcal: 153, prot: 20.9, carb: 0, gord: 7, fibra: null, sodio: 37, obs: 'Valor cru: use se pesar antes de preparar.' },
